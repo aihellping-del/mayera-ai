@@ -372,6 +372,21 @@ def ensure_api_key():
         return
 
     # 3) first time -> ask once, then save it encrypted on this PC.
+    #    Preferred: the friendly pop-up box (ordinary paste works there;
+    #    the black console window swallows Ctrl+V, which confused the
+    #    user). Any GUI failure falls back to the console prompt below.
+    try:
+        from mayera.key_prompt_gui import ask_key_gui
+        gui_key = ask_key_gui()
+    except Exception:  # noqa: BLE001
+        gui_key = None
+    if gui_key:
+        os.environ["GEMINI_API_KEY"] = gui_key
+        log.info("Gemini API key: %s", config.mask_key(gui_key))
+        if key_vault.save_key(gui_key):
+            print("  Key save ho gayi (encrypted). Badalna ho to "
+                  "KEY_CHANGE.bat chalana.")
+        return
     if sys.stdin and sys.stdin.isatty():
         print()
         print("  MAYERA ko Gemini API key chahiye (Google AI Studio se free milti hai).")

@@ -180,3 +180,20 @@ HTTP server: without a token the check fails soft and nothing
 changes; with the token a fake v2.4 install updated itself to
 v2.5.0, and the mayera_memory.db / key.dat / gh_token.dat sentinels
 stayed byte-identical.
+
+## Addendum — v2.6 (key entry via pop-up box)
+
+The user could not paste the Gemini key into the black console
+window (the hidden getpass prompt does not take Ctrl+V there, and
+the right-click paste route confused him). v2.6 adds
+mayera/key_prompt_gui.py: a small tkinter pop-up (tkinter ships
+with the python.org Windows installer) with an ordinary text box -
+Ctrl+V and the right-click Paste menu both work, a "show key" tick
+verifies the paste, and a button opens the AI Studio key page.
+ensure_api_key now tries the pop-up first and falls back to the
+console prompt on any GUI failure; the entered key is saved via
+the same DPAPI vault as before. Verified here: syntax, the GUI
+flow against a stub tkinter (SAVE returns the trimmed key,
+Cancel/close returns None), no-GUI and no-tkinter fallbacks, and
+ensure_api_key returning cleanly with no key and no tty. The real
+tkinter window itself can only render on his Windows PC.

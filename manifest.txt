@@ -13,6 +13,7 @@ mayera/connection_manager.py
 mayera/errors.py
 mayera/gemini_live.py
 mayera/key_vault.py
+mayera/key_prompt_gui.py
 mayera/memory_store.py
 mayera/proactive.py
 mayera/tools.py
