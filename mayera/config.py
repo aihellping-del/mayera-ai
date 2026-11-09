@@ -41,6 +41,11 @@ PORT = int(os.environ.get("MAYERA_PORT", "8765"))
 MAX_RECONNECT_ATTEMPTS = 5
 RECONNECT_BASE_DELAY = 1.0  # seconds, doubles every attempt
 
+# One model gets at most this long to connect before MAYERA moves on
+# to the next candidate. Without it, a silently hanging model made
+# START TALKING take ~35 seconds (seen in the user's log, 2026-11-10).
+CONNECT_TIMEOUT_SECONDS = 10.0
+
 SYSTEM_INSTRUCTION = (
     "You are MAYERA, a warm, intelligent, emotionally expressive female "
     "AI companion - a close friend, not a machine reading answers. The "

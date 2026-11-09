@@ -197,3 +197,19 @@ flow against a stub tkinter (SAVE returns the trimmed key,
 Cancel/close returns None), no-GUI and no-tkinter fallbacks, and
 ensure_api_key returning cleanly with no key and no tty. The real
 tkinter window itself can only render on his Windows PC.
+
+## Addendum — v2.7 (fast connect)
+
+The user's terminal log (2026-11-10 01:34) showed the real delay:
+browser connected 01:29:25, "MAYERA connected hai" only at
+01:30:00 - ~35 s inside the model-fallback loop, which retried
+slow/hanging candidates in a fixed order on every start, with no
+per-attempt timeout. v2.7: (1) each connect attempt is capped at
+CONNECT_TIMEOUT_SECONDS=10 (asyncio.wait_for, session cleaned up
+before moving on); (2) the model that connects is remembered in
+the settings store (last_model) and tried FIRST next time;
+(3) every attempt prints one "[connect]" line with its time, so a
+phone screenshot of the black window now shows exactly which model
+connected and how long it took. Unit-tested with stubbed _open:
+hang->timeout->next, fail->next, success saves last_model, saved
+model is attempted first, all-fail returns False.

@@ -256,18 +256,55 @@ class GeminiLiveSession:
             except Exception:
                 pass
 
+    def _ordered_candidates(self):
+        """Model candidates, last successful model first.
+
+        The user's log (2026-11-10) showed ~35 s from START TALKING to
+        'connected': dead/slow candidates were being tried in a fixed
+        order every single time. Remembering which model actually
+        worked makes later connects a single quick attempt.
+        """
+        models = config.get_model_candidates()
+        if self._store is not None:
+            try:
+                last = self._store.get_setting("last_model", "")
+            except Exception:  # noqa: BLE001
+                last = ""
+            if last and last in models:
+                models = [last] + [m for m in models if m != last]
+        return models
+
     async def _try_models(self):
         """Try each model with tools, then without. True if connected."""
         for with_tools in (True, False):
-            for model in config.get_model_candidates():
+            for model in self._ordered_candidates():
+                started = time.monotonic()
                 try:
-                    await self._open(model, with_tools)
-                    return True
+                    await asyncio.wait_for(
+                        self._open(model, with_tools),
+                        timeout=config.CONNECT_TIMEOUT_SECONDS)
                 except Exception as exc:  # noqa: BLE001
+                    elapsed = time.monotonic() - started
+                    print(f"  [connect] {model} nahi chala "
+                          f"({elapsed:.1f}s) - agla try...",
+                          flush=True)
+                    try:
+                        await self._close_session()
+                    except Exception:  # noqa: BLE001
+                        pass
                     code, message = friendly_error(exc)
                     if code in ("auth_error", "quota_error"):
                         raise MayeraError(code, message) from exc
                     continue
+                elapsed = time.monotonic() - started
+                print(f"  [connect] Model jud gaya: {model} "
+                      f"({elapsed:.1f}s)", flush=True)
+                if self._store is not None:
+                    try:
+                        self._store.set_setting("last_model", model)
+                    except Exception:  # noqa: BLE001
+                        pass
+                return True
         return False
 
     async def _connect_with_fallback(self):
