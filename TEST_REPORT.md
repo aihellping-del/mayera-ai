@@ -213,3 +213,21 @@ phone screenshot of the black window now shows exactly which model
 connected and how long it took. Unit-tested with stubbed _open:
 hang->timeout->next, fail->next, success saves last_model, saved
 model is attempted first, all-fail returns False.
+
+## Addendum — v2.8 (ChatGPT-like instant replies)
+
+On the user's ask ("ChatGPT jaisa reply kare, jaldi jaldi"), two
+changes. (1) His earlier log showed 'thought' parts in model
+responses: the native-audio model was silently deliberating before
+speaking. The Live config now sets thinking_budget=0
+(fast_thinking), so she starts speaking at once. Safety: _try_models
+tries tools+fast, no-tools+fast, then both again with thinking left
+on (the pre-v2.8 behaviour) - if a model ever rejects the
+no-thinking config, connection still succeeds the old way.
+(2) A SPEED RULE in the system instruction: default reply 1-2 short
+sentences, no repeating the question, no long introductions; long
+answers only when he asks for detail. Verified: SDK builds the
+config with thinking_budget=0 (legacy = None), and stubbed-connect
+tests pass for fast-first, legacy fallback after rejection, and
+last-model persistence. Real per-turn latency can only be measured
+on his PC/internet.

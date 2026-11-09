@@ -188,7 +188,7 @@ class GeminiLiveSession:
         return (self._store is not None
                 and self._store.get_setting("web_search", "0") == "1")
 
-    def _live_config(self, with_tools=True):
+    def _live_config(self, with_tools=True, fast_thinking=True):
         tool_list = None
         if with_tools:
             tool_list = [
@@ -204,8 +204,17 @@ class GeminiLiveSession:
                 tool_list.insert(0, types.Tool(
                     google_search=types.GoogleSearch()))
         end_sens, prefix_ms, silence_ms = self._vad_settings()
+        # Fast thinking (v2.8): the user's log showed 'thought' parts
+        # in the model's responses - it was silently deliberating
+        # before speaking, which feels nothing like ChatGPT's instant
+        # voice replies. thinking_budget=0 turns that pre-thinking
+        # off. If a model rejects this config, _try_models retries
+        # with fast_thinking=False (the old behaviour) automatically.
+        thinking = (types.ThinkingConfig(thinking_budget=0)
+                    if fast_thinking else None)
         return types.LiveConnectConfig(
             response_modalities=["AUDIO"],
+            thinking_config=thinking,
             system_instruction=self._system_instruction(),
             realtime_input_config=types.RealtimeInputConfig(
                 automatic_activity_detection=types.AutomaticActivityDetection(
@@ -237,9 +246,11 @@ class GeminiLiveSession:
             ),
         )
 
-    async def _open(self, model, with_tools):
+    async def _open(self, model, with_tools, fast_thinking=True):
         ctx = self._client.aio.live.connect(
-            model=model, config=self._live_config(with_tools=with_tools)
+            model=model,
+            config=self._live_config(with_tools=with_tools,
+                                     fast_thinking=fast_thinking)
         )
         session = await ctx.__aenter__()
         self._ctx = ctx
@@ -275,13 +286,17 @@ class GeminiLiveSession:
         return models
 
     async def _try_models(self):
-        """Try each model with tools, then without. True if connected."""
-        for with_tools in (True, False):
+        """Try models fast-first: tools+no-thinking, then no-tools,
+        then the same again with thinking left on (old behaviour) as
+        a last resort. True if connected."""
+        combos = ((True, True), (False, True), (True, False),
+                  (False, False))
+        for with_tools, fast_thinking in combos:
             for model in self._ordered_candidates():
                 started = time.monotonic()
                 try:
                     await asyncio.wait_for(
-                        self._open(model, with_tools),
+                        self._open(model, with_tools, fast_thinking),
                         timeout=config.CONNECT_TIMEOUT_SECONDS)
                 except Exception as exc:  # noqa: BLE001
                     elapsed = time.monotonic() - started
