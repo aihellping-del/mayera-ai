@@ -866,3 +866,19 @@ queued dialogs, dismisser failure swallowed) + regressions 15/15 +
 42/42 + 12/12 + 14/14 + 8/8 + 49/49 + 13/13 + 31/31 + 36/36. The
 ctypes dialog hunt itself can only run on his Windows PC - same
 standing limit as all PC-control effectors.
+
+--- v3.18.0 addendum (2026-11-10): UI OPENS AS ITS OWN DASHBOARD WINDOW ---
+User: 'jab chalu karta hu to browser me ui khulta hai, ayesa ho
+skta kya dashboard me ui open ho' - he wants the UI in its own
+app/dashboard window, not a tab in his everyday browser. ui.py
+open_ui() now launches Chrome (preferred) or Edge in --app mode on
+Windows: JARVIS gets its own window (no tabs/address bar, own
+taskbar button) at 1120x840, using the browser's default profile so
+the saved mic permission and device-picker choices carry over.
+Fallbacks, in order: app launch failure -> normal tab; no Chromium
+browser found -> normal tab; MAYERA_NO_APP_UI=1 -> always a tab.
+No new dependency and no behaviour change to the page itself.
+Tests: 5/5 new (~/workspace/test_app_window.py - app mode args,
+tab fallback, launch-failure fallback, env override) + server
+smoke + regressions 13/13 + 31/31 + 36/36 + 12/12. The actual
+window appearing is only provable on his PC (standing limit).
