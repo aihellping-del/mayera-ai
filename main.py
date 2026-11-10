@@ -49,7 +49,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from config import settings as config
-from core.audio_utils import rms_level
+from core.audio_utils import rms_level, should_forward_mic
 from core.connection_manager import ConnectionManager
 from core.errors import MayeraError, friendly_error
 from core.gemini_live import GeminiLiveSession
@@ -120,7 +120,8 @@ latency_samples: list[float] = []
 
 # v3.14 performance dashboard counters (shown in /health and in the
 # Settings drawer's Diagnostics section).
-audio_stats = {"mic_chunks_received": 0, "interruptions": 0}
+audio_stats = {"mic_chunks_received": 0, "interruptions": 0,
+               "mic_chunks_gated": 0}
 client_playback: dict = {}
 
 
@@ -555,7 +556,8 @@ async def websocket_endpoint(ws: WebSocket):
                 chunk = message["bytes"]
                 audio_stats["mic_chunks_received"] += 1
                 voice_state["last_chunk"] = time.monotonic()
-                if rms_level(chunk) > 0.03:
+                level = rms_level(chunk)
+                if level > 0.03:
                     now = time.monotonic()
                     # New speech cancels any pending reply measurement:
                     # he was not finished after all.
@@ -575,7 +577,16 @@ async def websocket_endpoint(ws: WebSocket):
                     voice_state["awaiting_reply"] = True
                     voice_state["speech_end"] = time.monotonic()
                 if live_session is not None and not mic_muted:
-                    await live_session.send_audio(chunk)
+                    # v3.23 noise gate: while JARVIS himself is
+                    # speaking, quiet background sounds no longer
+                    # reach Gemini (they were cutting him off
+                    # mid-sentence); only clearly loud speech -
+                    # a real barge-in - gets through.
+                    if should_forward_mic(level, voice_state["last_ai"],
+                                          time.monotonic()):
+                        await live_session.send_audio(chunk)
+                    else:
+                        audio_stats["mic_chunks_gated"] += 1
                 continue
 
             # --- text = control messages ---------------------------------

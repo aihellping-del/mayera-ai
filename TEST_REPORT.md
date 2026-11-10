@@ -989,3 +989,26 @@ model/network-side (his fast replies are 3.0 s; spikes ride on
 tool turns) - no client code can cut Google's generation time.
 Tests: 10/10 new (~/workspace/test_fast_vision.py) + all
 regressions + server smoke.
+
+--- v3.23.0 addendum (2026-11-10): BACKGROUND NOISE CUT HIM OFF
+MID-SENTENCE - NOISE GATE ---
+User: while JARVIS is speaking, any background sound makes him
+stop and never continue. Cause: every mic chunk was forwarded to
+Gemini even during playback, so background noise (and speaker
+echo) tripped the Live VAD's interruption and cancelled the
+reply. The v3.10 browser ducking (x0.35) softened this but never
+stopped it.
+Fix (server-side, main.py mic path): core/audio_utils.
+should_forward_mic(level, last_ai, now) - while JARVIS audio
+arrived within the last 1.2 s, only clearly LOUD chunks
+(RMS >= 0.22, the same threshold the browser ducking uses for a
+real barge-in) are forwarded; everything quieter is dropped and
+counted in audio_stats.mic_chunks_gated. A genuine interruption
+or a loud Stop still gets through instantly; outside the window
+the mic flows exactly as before. Instruction gained a BOLTE
+SAMAY SHOR rule: background noise while speaking is not an
+interruption, finish the sentence; on 'aage bolo / continue',
+resume from where he stopped instead of repeating.
+Tests: 13/13 new (~/workspace/test_noise_gate.py - gate truth
+table incl. window edges and loud barge-in) + regressions
+12/14/13/49 + server smoke.

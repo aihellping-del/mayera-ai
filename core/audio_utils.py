@@ -92,6 +92,28 @@ def rms_level(data):
     return math.sqrt(total / n) / 32768.0
 
 
+def should_forward_mic(level, last_ai, now, window=1.2, loud=0.22):
+    """Noise gate for while JARVIS himself is speaking (v3.23).
+
+    The user's report: while JARVIS is mid-sentence, any background
+    sound (TV, family talking, a door) reaches Gemini, its VAD
+    calls it an interruption, and JARVIS stops and never finishes
+    the sentence. The browser already ducks the mic x0.35 during
+    playback (v3.10); this server-side gate is the hard version:
+    while JARVIS audio arrived within the last `window` seconds,
+    only genuinely LOUD chunks (level >= loud - the user clearly
+    talking over him, a real barge-in or Stop) are forwarded.
+    Quiet chunks in that window are dropped, so background noise
+    can no longer cut him off. Outside the window everything is
+    forwarded exactly as before.
+    """
+    if not last_ai:
+        return True
+    if now - last_ai > window:
+        return True
+    return level >= loud
+
+
 def chunk_bytes(data, chunk_size):
     """Yield successive chunks of `chunk_size` bytes."""
     data = ensure_bytes(data)
