@@ -35,6 +35,25 @@ let playHead = 0;                 // next scheduled buffer start time
 let duckUntilWall = 0;            // wall-clock (s) until which JARVIS's own voice is audible - mic echo duck window
 const scheduled = new Set();      // live BufferSources (for interruption flush)
 
+// --- adaptive jitter buffer + playback stats (v3.14) ---
+// ROOT CAUSE of "beech me ruk-ruk kar bolta hai": chunks used to be
+// scheduled with only a fixed 30 ms lookahead, so every network or
+// main-thread jitter became an audible gap mid-sentence. Now the
+// FIRST chunk of a turn waits adaptBufferMs (a small jitter cushion)
+// and later chunks chain exactly on playHead. The cushion adapts:
+// a starvation (chunk arriving after its slot passed) grows it,
+// clean turns shrink it towards the floor.
+let adaptBufferMs = 120;          // current jitter cushion
+const BUFFER_MIN_MS = 60, BUFFER_MAX_MS = 300;
+let turnHadStarvation = false;
+const pbStats = {
+  received: 0,        // AI audio chunks arrived from the server
+  played: 0,          // chunks that actually finished playing
+  starved: 0,         // chunks that arrived after their slot (gap!)
+  droppedQueue: 0,    // chunks dropped by the overflow guard
+  interruptedFlushes: 0,
+};
+
 // --- animation levels (0..1) ---
 let micLevel = 0, speakLevel = 0;
 
@@ -102,6 +121,20 @@ function connectWS() {
 }
 setInterval(() => { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" })); }, 20000);
 
+// Playback diagnostics for the /health dashboard (v3.14): the server
+// cannot see what the speaker actually did, so the browser reports
+// its counters every 5 s during a call.
+setInterval(() => {
+  if (!callActive) return;
+  wsSend({ type: "stats", playback: {
+    received: pbStats.received, played: pbStats.played,
+    starved: pbStats.starved, droppedQueue: pbStats.droppedQueue,
+    interruptedFlushes: pbStats.interruptedFlushes,
+    bufferMs: adaptBufferMs,
+    queuedAheadMs: playCtx ? Math.max(0, Math.round((playHead - playCtx.currentTime) * 1000)) : 0,
+  }});
+}, 5000);
+
 function wsSend(obj) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
 }
@@ -142,9 +175,10 @@ async function startMicrophone() {
   });
   micCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: MIC_RATE });
   micSource = micCtx.createMediaStreamSource(micStream);
-  // 2048 samples @16 kHz = 128 ms per chunk (was 4096 = 256 ms):
-  // his speech reaches Gemini up to ~128 ms sooner at every turn end.
-  micProcessor = micCtx.createScriptProcessor(2048, 1, 1);
+  // 1024 samples @16 kHz = 64 ms per chunk (v3.14; was 2048 = 128 ms,
+  // originally 4096 = 256 ms): smaller chunks reach Gemini sooner at
+  // every turn end, which trims the felt reply delay further.
+  micProcessor = micCtx.createScriptProcessor(1024, 1, 1);
   micSink = micCtx.createGain(); micSink.gain.value = 0; // silent sink, no echo
 
   micProcessor.onaudioprocess = (e) => {
@@ -184,7 +218,14 @@ function stopMicrophone() {
 /* AI audio playback (24 kHz PCM) with interruption flush              */
 /* ------------------------------------------------------------------ */
 function ensurePlayCtx() {
-  if (!playCtx) playCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!playCtx) {
+    // Ask for a 24 kHz context so the browser does not resample
+    // every AI buffer 24k -> device rate (v3.14); fall back plainly
+    // where a fixed rate is refused - buffers carry their own rate
+    // either way, so playback is correct in both cases.
+    try { playCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: AI_RATE }); }
+    catch { playCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+  }
   if (playCtx.state === "suspended") playCtx.resume();
   return playCtx;
 }
@@ -193,6 +234,7 @@ function playAiAudio(arrayBuffer) {
   const ctx = ensurePlayCtx();
   const pcm = new Int16Array(arrayBuffer);
   if (!pcm.length) return;
+  pbStats.received++;
   const floats = new Float32Array(pcm.length);
   for (let i = 0; i < pcm.length; i++) floats[i] = pcm[i] / 32768;
   speakLevel = Math.max(speakLevel, Math.min(1, rmsOf(floats) * 2.4));
@@ -202,19 +244,50 @@ function playAiAudio(arrayBuffer) {
   const src = ctx.createBufferSource();
   src.buffer = buffer;
   src.connect(ctx.destination);
-  const startAt = Math.max(playHead, ctx.currentTime + 0.03);
+
+  const now = ctx.currentTime;
+  // Overflow guard: if more than ~6 s of audio is already queued
+  // (a stall burst dumped a backlog), drop the backlog instead of
+  // speaking stale audio for seconds - restart cleanly at "now".
+  if (playHead - now > 6) {
+    const dropped = scheduled.size;
+    scheduled.forEach((s) => { try { s.stop(); } catch {} });
+    scheduled.clear();
+    pbStats.droppedQueue += dropped;
+    playHead = 0;
+  }
+  let startAt;
+  const gap = now - playHead;
+  if (playHead === 0 || gap > 0.25) {
+    // New turn: hold the first chunk for the adaptive jitter
+    // cushion so the next chunks can chain gaplessly behind it.
+    startAt = now + adaptBufferMs / 1000;
+    turnHadStarvation = false;
+  } else if (gap > 0.005) {
+    // Starvation MID-TURN: the queue drained only a moment ago
+    // (<250 ms) but the next chunk is already late - this is the
+    // audible mid-sentence gap. Restart immediately and grow the
+    // cushion so following turns absorb this much jitter.
+    pbStats.starved++;
+    turnHadStarvation = true;
+    adaptBufferMs = Math.min(BUFFER_MAX_MS, Math.round(adaptBufferMs * 1.3) + 10);
+    startAt = now + 0.02;
+  } else {
+    startAt = playHead; // mid-turn: chain exactly, no gap, no overlap
+  }
   src.start(startAt);
   playHead = startAt + buffer.duration;
   // wall-clock end of everything scheduled so far (+300 ms tail):
   // the mic duck uses this to know JARVIS is still audible.
   duckUntilWall = performance.now() / 1000 + (playHead - ctx.currentTime) + 0.30;
   scheduled.add(src);
-  src.onended = () => scheduled.delete(src);
+  src.onended = () => { scheduled.delete(src); pbStats.played++; };
   if (callActive) setState("speaking", "JARVIS bol raha hai...");
 }
 
 function flushPlayback() {
   // User interrupted: stop everything already scheduled, immediately.
+  if (scheduled.size) pbStats.interruptedFlushes++;
   scheduled.forEach((s) => { try { s.stop(); } catch {} });
   scheduled.clear();
   playHead = 0;
@@ -235,6 +308,12 @@ function tick() {
   document.documentElement.style.setProperty("--mouth", mouth.toFixed(1) + "px");
   // If scheduled audio has run out, MAYERA finished speaking.
   if (speaking && playCtx && playCtx.currentTime > playHead + 0.05 && scheduled.size === 0) {
+    // A turn that drained with NO starvation earns a smaller
+    // cushion next time (faster first audio); floor 60 ms (v3.14).
+    if (!turnHadStarvation && adaptBufferMs > BUFFER_MIN_MS) {
+      adaptBufferMs = Math.max(BUFFER_MIN_MS, Math.round(adaptBufferMs * 0.9));
+      turnHadStarvation = true; // shrink at most once per drained turn
+    }
     setState("listening", "JARVIS sun raha hai...");
   }
   requestAnimationFrame(tick);
@@ -346,10 +425,27 @@ async function refreshMemPill() {
 refreshMemPill();
 setInterval(refreshMemPill, 15000);
 
+async function refreshDiag() {
+  const box = $("diagBox");
+  if (!box) return;
+  try {
+    const h = await (await fetch("/health")).json();
+    const c = h.client_playback || {};
+    const a = h.audio || {}, t = h.tools || {};
+    box.textContent =
+      `Connection: ${h.connection_state} • Reconnects: ${h.reconnect_count}` +
+      `\nJawab latency: last ${h.last_reply_latency_s ?? "-"}s • avg ${h.avg_reply_latency_s ?? "-"}s (${h.replies_measured} replies)` +
+      `\nAudio out: ${a.ai_chunks_sent} chunks bheje • Mic in: ${a.mic_chunks_received} chunks` +
+      `\nSpeaker (browser): played ${c.played ?? "-"} • gap (starved) ${c.starved ?? "-"} • dropped ${c.droppedQueue ?? "-"} • buffer ${c.bufferMs ?? "-"} ms` +
+      `\nTools: ${t.calls} calls • last ${t.last_seconds ?? "-"}s • avg ${t.avg_seconds ?? "-"}s • deduped ${t.deduped}`;
+  } catch { box.textContent = "Diagnostics abhi uplabdh nahi."; }
+}
+
 async function openDrawer() {
   drawer.classList.add("open");
   scrim.classList.add("show");
   drawer.setAttribute("aria-hidden", "false");
+  refreshDiag();
   try {
     const s = await (await fetch("/api/settings")).json();
     $("setMemory").checked = s.memory_enabled === "1";

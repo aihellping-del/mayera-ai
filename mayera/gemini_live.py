@@ -70,6 +70,10 @@ class GeminiLiveSession:
         # finished action (e.g. text already typed) is never reported
         # lost and the model never hangs waiting for a result.
         self._pending_tool_responses = []
+        self._tool_tasks = set()       # background tool batches (v3.14)
+        self._tool_lock = asyncio.Lock()  # batches never overlap
+        self.tool_stats = {"calls": 0, "deduped": 0,
+                           "total_seconds": 0.0, "last_seconds": None}
         self._reconnect_started = 0.0
         self._stopped = True
         self._resumption_handle = None
@@ -146,6 +150,9 @@ class GeminiLiveSession:
         self._stopped = True
         self.state = "DISCONNECTED"
         self._save_checkpoint()
+        for _task in list(self._tool_tasks):
+            _task.cancel()
+        self._tool_tasks.clear()
         if self._reconnect_task is not None:
             self._reconnect_task.cancel()
             self._reconnect_task = None
@@ -604,7 +611,11 @@ class GeminiLiveSession:
         # --- tool calls (MAYERA wants to act) ---
         tool_call = getattr(response, "tool_call", None)
         if tool_call is not None and getattr(tool_call, "function_calls", None):
-            await self._handle_tool_calls(tool_call.function_calls)
+            # v3.14: tools run as a BACKGROUND task. Awaiting them
+            # here used to freeze the whole receive loop for the
+            # tool's full duration (a 5 s screen look stalled audio,
+            # transcription, interruption and go_away handling alike).
+            self._spawn_tool_calls(tool_call.function_calls)
 
         sc = getattr(response, "server_content", None)
 
@@ -653,40 +664,102 @@ class GeminiLiveSession:
         self._in_buf = ""
         self._out_buf = ""
 
-    async def _handle_tool_calls(self, function_calls):
-        if self._tools is None or self._session is None:
+    # Tools that only read the world or touch independent state -
+    # safe to run concurrently inside one batch (v3.14). Everything
+    # that drives the PC/mouse/screen/YouTube stays sequential and in
+    # order: open_app -> type_text must never race each other.
+    _PARALLEL_SAFE = frozenset(
+        {"get_current_time", "youtube_search", "remember_this",
+         "forget_memory"})
+
+    def _spawn_tool_calls(self, function_calls):
+        if self._tools is None:
             return
-        self._last_tool_at = time.monotonic()
-        responses = []
-        for call in function_calls:
-            args = dict(call.args or {})
-            _args_short = str(args)
-            if len(_args_short) > 120:
-                _args_short = _args_short[:120] + "..."
-            print(f"  [tool] {call.name} called with {_args_short}",
-                  flush=True)
-            _t0 = time.monotonic()
-            try:
-                result = await self._tools.execute(call.name, args)
-            except Exception as exc:  # noqa: BLE001 - reported, never fatal
-                result = {"status": "error",
-                          "message": exc.__class__.__name__}
-            _dt = time.monotonic() - _t0
-            _status = (result or {}).get("status", "?")
-            print(f"  [tool] {call.name} -> {_status} ({_dt:.1f}s)",
-                  flush=True)
-            if _status == "typed":
-                print(f"  [tool] type_text typed "
-                      f"{(result or {}).get('chars', 0)} chars",
+        task = asyncio.create_task(self._handle_tool_calls(function_calls))
+        self._tool_tasks.add(task)
+
+        def _done(done_task):
+            self._tool_tasks.discard(done_task)
+            if not done_task.cancelled() and done_task.exception() is not None:
+                print(f"  [tool] background batch me gadbad: "
+                      f"{done_task.exception().__class__.__name__}",
                       flush=True)
-            if _status == "error":
-                print(f"  [tool] error: {call.name}: "
-                      f"{(result or {}).get('message', '')}", flush=True)
-            kwargs = {"name": call.name, "response": result}
-            if getattr(call, "id", None):
-                kwargs["id"] = call.id
-            responses.append(types.FunctionResponse(**kwargs))
-        await self._deliver_tool_responses(responses)
+
+        task.add_done_callback(_done)
+
+    async def _run_one_tool(self, call, args):
+        _args_short = str(args)
+        if len(_args_short) > 120:
+            _args_short = _args_short[:120] + "..."
+        print(f"  [tool] {call.name} called with {_args_short}",
+              flush=True)
+        _t0 = time.monotonic()
+        try:
+            result = await self._tools.execute(call.name, args)
+        except Exception as exc:  # noqa: BLE001 - reported, never fatal
+            result = {"status": "error",
+                      "message": exc.__class__.__name__}
+        _dt = time.monotonic() - _t0
+        self._last_tool_at = time.monotonic()
+        self.tool_stats["calls"] += 1
+        self.tool_stats["total_seconds"] += _dt
+        self.tool_stats["last_seconds"] = round(_dt, 2)
+        _status = (result or {}).get("status", "?")
+        print(f"  [tool] {call.name} -> {_status} ({_dt:.1f}s)",
+              flush=True)
+        if _status == "typed":
+            print(f"  [tool] type_text typed "
+                  f"{(result or {}).get('chars', 0)} chars", flush=True)
+        if _status == "error":
+            print(f"  [tool] error: {call.name}: "
+                  f"{(result or {}).get('message', '')}", flush=True)
+        return result
+
+    async def _handle_tool_calls(self, function_calls):
+        if self._tools is None:
+            return
+        # Batches are background tasks, but two batches still never
+        # run at once: PC state must change one batch at a time.
+        async with self._tool_lock:
+            self._last_tool_at = time.monotonic()
+            calls = [(call, dict(call.args or {})) for call in function_calls]
+            results = [None] * len(calls)
+            # Deduplicate identical calls in the batch (the model
+            # occasionally asks for the same thing twice in one turn):
+            # execute once, reuse the result for every copy.
+            unique = {}
+            for idx, (call, args) in enumerate(calls):
+                key = (call.name, repr(sorted(args.items())))
+                unique.setdefault(key, []).append(idx)
+            if len(unique) < len(calls):
+                self.tool_stats["deduped"] += len(calls) - len(unique)
+                print(f"  [tool] duplicate call(s) deduped: "
+                      f"{len(calls) - len(unique)}", flush=True)
+            reps = [(key, idxs[0]) for key, idxs in unique.items()]
+            parallel = [(key, i) for key, i in reps
+                        if calls[i][0].name in self._PARALLEL_SAFE]
+            sequential = [(key, i) for key, i in reps
+                          if calls[i][0].name not in self._PARALLEL_SAFE]
+            if len(parallel) > 1:
+                got = await asyncio.gather(
+                    *(self._run_one_tool(calls[i][0], calls[i][1])
+                      for _key, i in parallel))
+                for (key, _i), result in zip(parallel, got):
+                    for idx in unique[key]:
+                        results[idx] = result
+            else:
+                sequential = parallel + sequential
+            for key, i in sequential:
+                result = await self._run_one_tool(calls[i][0], calls[i][1])
+                for idx in unique[key]:
+                    results[idx] = result
+            responses = []
+            for (call, _args), result in zip(calls, results):
+                kwargs = {"name": call.name, "response": result}
+                if getattr(call, "id", None):
+                    kwargs["id"] = call.id
+                responses.append(types.FunctionResponse(**kwargs))
+            await self._deliver_tool_responses(responses)
 
     async def _deliver_tool_responses(self, responses):
         """Send tool results back to the model - ALWAYS (v3.13). If

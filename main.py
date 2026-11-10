@@ -99,6 +99,11 @@ prewarm_task: asyncio.Task | None = None
 # reply audio arriving. Printed in the terminal, kept for /health.
 latency_samples: list[float] = []
 
+# v3.14 performance dashboard counters (shown in /health and in the
+# Settings drawer's Diagnostics section).
+audio_stats = {"mic_chunks_received": 0, "interruptions": 0}
+client_playback: dict = {}
+
 
 def _record_latency(seconds: float):
     latency_samples.append(seconds)
@@ -210,6 +215,7 @@ async def on_status(state: str, message: str):
 
 
 async def on_interrupted():
+    audio_stats["interruptions"] += 1
     await manager.send_interrupted()
 
 
@@ -331,7 +337,26 @@ async def health():
                                       / len(latency_samples), 2)
                                 if latency_samples else None),
         "replies_measured": len(latency_samples),
+        "audio": {
+            "mic_chunks_received": audio_stats["mic_chunks_received"],
+            "ai_chunks_sent": manager.audio_sent,
+            "ai_chunks_dropped_queue": manager.audio_dropped,
+            "interruptions": audio_stats["interruptions"],
+        },
+        "tools": _tool_stats(),
+        "client_playback": dict(client_playback),
     }
+
+
+def _tool_stats():
+    if live_session is None:
+        return {"calls": 0, "deduped": 0, "last_seconds": None,
+                "avg_seconds": None}
+    ts = live_session.tool_stats
+    avg = (round(ts["total_seconds"] / ts["calls"], 2)
+           if ts["calls"] else None)
+    return {"calls": ts["calls"], "deduped": ts["deduped"],
+            "last_seconds": ts["last_seconds"], "avg_seconds": avg}
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +463,7 @@ async def websocket_endpoint(ws: WebSocket):
             # --- binary = microphone audio -------------------------------
             if message.get("bytes") is not None:
                 chunk = message["bytes"]
+                audio_stats["mic_chunks_received"] += 1
                 if rms_level(chunk) > 0.03:
                     now = time.monotonic()
                     # New speech cancels any pending reply measurement:
@@ -552,6 +578,12 @@ async def websocket_endpoint(ws: WebSocket):
 
             elif ctype == "ping":
                 await manager.send_json({"type": "pong"})
+
+            elif ctype == "stats":
+                # Browser playback counters for the dashboard (v3.14).
+                pb = control.get("playback")
+                if isinstance(pb, dict):
+                    client_playback.update(pb)
 
     except WebSocketDisconnect:
         log.info("Browser disconnected.")

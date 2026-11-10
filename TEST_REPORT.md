@@ -631,3 +631,71 @@ Tests: 42/42 new (~/workspace/test_notepad_fix.py) + regressions
 (pygetwindow/pyperclip/pyautogui on his PC, elevated-window cases)
 can only be proven on his PC: run test_notepad.py first, then the
 voice sentence.
+
+--- v3.14.0 addendum (2026-11-10): ULTRA-SMOOTH VOICE ENGINE (JARVIS 2.0 brief) ---
+Diagnosis first (code read: app.js playback, connection_manager,
+gemini_live receive/tool loop, config). ROOT CAUSES FOUND:
+(1) app.js scheduled every AI chunk with a fixed 30 ms lookahead
+and NO jitter buffer: any network/main-thread jitter pushed a chunk
+past its slot and the delay became an audible mid-sentence pause;
+a late chunk also shifted nothing - gaps were structural.
+(2) The Gemini receive loop AWAITED each browser WebSocket send
+(on_ai_audio -> manager.send_audio): a slow browser send stalled
+the loop, Gemini chunks bunched up, then burst - starvation/flood.
+(3) The receive loop also AWAITED tool execution inline: a 5 s
+look_at_screen froze audio, transcription, interruption and
+go_away handling for its whole duration.
+FIXES:
+- app.js playback: ADAPTIVE JITTER BUFFER - first chunk of a turn
+  waits a cushion (start 120 ms, floor 60, cap 300); mid-turn chunks
+  chain exactly on playHead (gapless); a chunk arriving <250 ms
+  after the queue drained = starvation: restart in 20 ms, cushion
+  grows x1.3+10; a cleanly drained turn shrinks the cushion x0.9.
+  OVERFLOW GUARD: >6 s queued audio = drop the stale backlog and
+  restart clean (counted). Playback context now requests 24 kHz
+  (no per-buffer resample; fallback kept). Mic chunks 128 -> 64 ms.
+  Playback counters (received/played/starved/dropped/flushes +
+  cushion + queued-ahead) reported to the server every 5 s.
+- connection_manager: audio is ENQUEUED and written by a dedicated
+  sender task (maxsize 300, drop-oldest on overflow, both counted);
+  send_audio returns immediately - the receive loop can no longer
+  be blocked by the browser.
+- gemini_live tools: batches run as BACKGROUND tasks (receive loop
+  stays live during tools); batches still never overlap (lock), and
+  inside a batch: identical duplicate calls are deduped (executed
+  once, result reused, counted), a parallel-safe set (get_current_
+  time, youtube_search, remember_this, forget_memory) runs
+  concurrently via gather, while ALL PC/mouse/screen/YouTube actions
+  stay strictly sequential in order (open_app fully finishes before
+  type_text - racing them was the Notepad bug class). Tool stats
+  (calls/deduped/total/last) tracked. stop() cancels tool tasks.
+- Dashboard: /health gains audio{mic_chunks_received, ai_chunks_
+  sent, ai_chunks_dropped_queue, interruptions}, tools{calls,
+  deduped,last_seconds,avg_seconds}, client_playback{...}; the
+  Settings drawer gains a "Diagnostics (live haal)" section fed
+  from /health (connection, reconnects, latency last/avg, audio
+  counts, speaker gaps/drops/cushion, tool times).
+Verified already-correct and NOT changed (brief section 6): PCM16
+16 kHz mono in / 24 kHz mono out, thinking_budget=0, pre-warm,
+fast VAD 250 ms, session resumption, compression, single-session
+lock, echo ducking.
+TESTS: 13/13 new Python (~/workspace/test_smooth_engine.py - queue
+non-blocking + ordered + overflow drop-oldest; slow tool 1.2 s
+leaves handling at <0.3 s and still delivers; dedupe 2 calls -> 1
+execution/3 responses; two safe searches 0.4 s each finish together
+<0.75 s; PC order preserved; /health fields) + 11/11 Node against
+the REAL app.js in a vm with stubbed DOM/WebAudio (cushion start,
+gapless chain, starvation adapt, long-pause=new-turn, overflow,
+flush, counters) + Playwright smoke (drawer Diagnostics renders
+live /health, zero JS errors) + regressions 12/12 + 14/14 + 15/15
++ 8/8 + 49/49 + 42/42. Node test caught a real design flaw during
+development (long pause vs mid-turn starvation) - the 250 ms
+grace window exists because of it.
+HONEST LIMITS: the brief's section-9 suite (20 live conversations,
+10 long replies, interruption drills on real audio) needs his PC,
+mic and key - it cannot be run or faked here, and no before/after
+latency numbers are claimed beyond his real v3.5 data (avg ~7.2s,
+spikes on tool turns). The structural causes of those spikes
+(inline tools, blocked sends, zero jitter buffer) are exactly what
+this version removes; his next [latency] + Diagnostics screenshot
+is the real before/after proof.
