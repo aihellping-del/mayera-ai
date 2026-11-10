@@ -279,3 +279,16 @@ fields); stop-command regression 11/11; tools OK; real-package
 headless run: UI pixel-identical to v2.9, 36 wave bars, no JS
 errors. Real per-reply latency can only be measured on the user's
 PC/internet - the new [latency] terminal lines provide exactly that.
+
+--- v3.0.1 addendum (2026-11-10): 'thinking' face fix ---
+Cosmetic regression from v3.0, found on review and confirmed in
+code: the mic handler flips voice_state["talking"] off at 0.6 s of
+silence, but the watchdog showed the 'thinking' state only while
+talking was still true AND silence exceeded 0.8 s - unreachable, so
+the thinking pulse never appeared. Replies and latency were never
+affected. Fix: the watchdog now keys on voice_state["awaiting_reply"]
+(true exactly between his finished turn and the first reply audio),
+which also can never fire while MAYERA is merely idle after a
+finished reply; the START handler also resets all voice state per
+call. Verified against the real watchdog loop: fires while awaiting
+a reply, silent when idle; all 15 v3.0 behaviour tests still pass.

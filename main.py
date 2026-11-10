@@ -196,7 +196,14 @@ async def watchdog():
             continue
         now = time.monotonic()
         # user just finished speaking, MAYERA has not answered yet
-        if (voice_state["talking"] and now - voice_state["last_voice"] > 0.8
+        # v3.0.1 fix: v3.0 flipped "talking" off at 0.6 s, so the old
+        # condition (talking AND >0.8 s) could never fire and the
+        # 'thinking' face never appeared. "awaiting_reply" is the exact
+        # state for this: he finished a turn, no reply audio yet - and
+        # unlike a bare not-talking check it can never fire while
+        # MAYERA is simply idle after a finished reply.
+        if (voice_state["awaiting_reply"]
+                and now - voice_state["last_voice"] > 0.8
                 and now - voice_state["last_ai"] > 1.5
                 and not voice_state["thinking_sent"]):
             voice_state["thinking_sent"] = True
@@ -391,6 +398,12 @@ async def websocket_endpoint(ws: WebSocket):
 
             if ctype == "start":
                 in_call = True
+                # Fresh call, fresh voice state (v3.0.1): no stale
+                # 'thinking'/latency state may leak across calls.
+                voice_state.update({
+                    "talking": False, "thinking_sent": False,
+                    "last_voice": 0.0, "last_ai": 0.0,
+                    "awaiting_reply": False})
                 # v3.0 warm path: a pre-warmed session is already
                 # connected, so START is instant - just greet + listen.
                 if live_session is not None and live_session.is_connected:
