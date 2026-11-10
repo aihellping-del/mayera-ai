@@ -909,3 +909,29 @@ playback 11/11 (cushion expectations updated) + port pack 36/36
 before/after on HIS replies needs his PC - the restart + 2-minute
 talk + [latency] screenshot is the proof, and the new segment
 number will show exactly where any remaining wait lives.
+
+--- v3.20.0 addendum (2026-11-10): JARVIS'S OWN PERSONAL BROWSER ---
+User: 'usko ek personal browser bhi de do taki mai jo bolu usko
+research karega or jisko bhi bolu usko click bhi kare'. New
+actions/browser_agent.py: launches Chrome or Edge with a dedicated
+profile (~/.jarvis_browser - separate from his personal browser)
+and drives it over the Chrome DevTools Protocol on localhost:9333
+via the already-present websockets dependency - no new installs.
+Six tools (declarations 36 -> 42): browser_search (DuckDuckGo
+results page shown live in JARVIS's window, results listed with
+numbers), browser_open_result (by number), browser_research
+(search + open top result + read its text for a spoken summary),
+browser_read_page, browser_click (visible link/button BY NAME),
+browser_back. Safety: click labels matching buy/pay/checkout/
+order/send/delete/subscribe (incl. kharid/bhejo/hatao) go through
+the same UI Haan/Nahi ConfirmGate as file trashing; no approval =
+cancelled, never self-approves; CAPTCHA/login walls are left to
+the user per his rulebook (instruction paragraph added).
+Tests: 18/18 new (~/workspace/test_browser_agent.py - fake CDP
+page: search + uddg unwrap, open by number, research text, plain
+click, risky click denied/allowed/no-gate, executor routing +
+gate pass-through, 42 declarations) + all regressions (decl counts
+updated 36 -> 42 in four suites) + server smoke. Real CDP driving
+of his Chrome/Edge can only be proven on his PC - first voice
+tests: 'apne browser me horror movies search karo', then 'dusra
+wala kholo', then 'Wikipedia par click karo'.

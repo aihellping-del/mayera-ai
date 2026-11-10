@@ -744,6 +744,10 @@ class GeminiLiveSession:
         "youtube_play": "Video laga raha hai...",
         "open_app": "App khol raha hai...",
         "take_screenshot": "Screenshot le raha hai...",
+        "browser_search": "Apne browser me khoj raha hai...",
+        "browser_research": "Apne browser me research kar raha hai...",
+        "browser_open_result": "Result khol raha hai...",
+        "browser_read_page": "Page padh raha hai...",
     }
 
     def _spawn_tool_calls(self, function_calls):

@@ -54,3 +54,4 @@ plugins/loader.py
 providers/__init__.py
 providers/key_prompt_gui.py
 providers/key_vault.py
+actions/browser_agent.py

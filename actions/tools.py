@@ -615,6 +615,80 @@ def function_declarations():
             parameters=types.Schema(type=types.Type.OBJECT, properties={}),
         ),
         types.FunctionDeclaration(
+            name="browser_search",
+            description=(
+                "Search the web in JARVIS's OWN personal browser "
+                "window (the user watches it happen) and list the "
+                "top results with numbers. Use when the user asks "
+                "to search/research something on the internet."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={"query": types.Schema(
+                    type=types.Type.STRING,
+                    description="What to search for.")},
+                required=["query"]),
+        ),
+        types.FunctionDeclaration(
+            name="browser_research",
+            description=(
+                "Full research in JARVIS's own browser: search, open "
+                "the top result and read its text back. Then speak a "
+                "short summary in your own words. Use for 'research "
+                "karo', 'iske baare me pata karo' type requests."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={"query": types.Schema(
+                    type=types.Type.STRING,
+                    description="Topic to research.")},
+                required=["query"]),
+        ),
+        types.FunctionDeclaration(
+            name="browser_open_result",
+            description=(
+                "Open result number N from the last browser_search "
+                "list in JARVIS's browser ('dusra wala kholo')."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={"number": types.Schema(
+                    type=types.Type.INTEGER,
+                    description="Result number from the last search.")},
+                required=["number"]),
+        ),
+        types.FunctionDeclaration(
+            name="browser_click",
+            description=(
+                "Click a visible link or button on the current page "
+                "of JARVIS's browser BY ITS TEXT ('Wikipedia par "
+                "click karo'). Buttons about money/sending/deleting "
+                "first ask the user on a confirmation card by "
+                "themselves - never argue with a 'cancelled' result."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={"text": types.Schema(
+                    type=types.Type.STRING,
+                    description="Text written on the link/button.")},
+                required=["text"]),
+        ),
+        types.FunctionDeclaration(
+            name="browser_read_page",
+            description=(
+                "Read the text of the page currently open in "
+                "JARVIS's browser, e.g. to summarise it aloud."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT, properties={}),
+        ),
+        types.FunctionDeclaration(
+            name="browser_back",
+            description="Go back to the previous page in JARVIS's browser.",
+            parameters=types.Schema(
+                type=types.Type.OBJECT, properties={}),
+        ),
+        types.FunctionDeclaration(
             name="open_website",
             description=(
                 "Open a website in the user's default browser, e.g. when "
@@ -651,10 +725,15 @@ _FILE_TOOLS = {"list_files", "create_folder", "create_file",
                "write_file", "read_file", "move_file", "copy_file",
                "rename_file", "trash_file", "find_files"}
 
+# v3.20: JARVIS's own personal browser
+_BROWSER_TOOLS = {"browser_search", "browser_research",
+                  "browser_open_result", "browser_click",
+                  "browser_read_page", "browser_back"}
+
 
 class ToolExecutor:
     def __init__(self, store, opener=None, pc=None, yt=None, vision=None,
-                 plugins=None, files=None, confirm=None):
+                 plugins=None, files=None, confirm=None, browser=None):
         self._store = store
         self._opener = opener or webbrowser.open
         self._pc = pc  # PcController (v3.1 PC Control pack) or None
@@ -662,6 +741,7 @@ class ToolExecutor:
         self._vision = vision  # ScreenVision (v3.12) or None
         self._files = files  # FileOps (v3.17) or None
         self._confirm = confirm  # ConfirmGate (v3.17) or None
+        self._browser = browser  # BrowserAgent (v3.20) or None
         if plugins is None:
             try:
                 from plugins import loader as plugins_loader
@@ -684,6 +764,11 @@ class ToolExecutor:
                     self._run_plugin, name, args)
             if name == "forget_memory":
                 return self._forget(args.get("query", ""))
+            if name in _BROWSER_TOOLS:
+                # The browser agent is async (DevTools Protocol) -
+                # await it directly; tool batches already run as
+                # background tasks, so a slow page never stalls audio.
+                return await self._browser_action(name, args)
             if name in _FILE_TOOLS or name in ("get_weather",
                                                "get_system_info",
                                                "set_reminder",
@@ -794,6 +879,31 @@ class ToolExecutor:
         except Exception as exc:  # noqa: BLE001 - reported to the model
             return {"status": "error",
                     "message": f"plugin {name}: {exc.__class__.__name__}"}
+
+    async def _browser_action(self, name, args):
+        if self._browser is None:
+            return {"status": "error", "message": "browser unavailable"}
+        b = self._browser
+        if name == "browser_search":
+            return await b.search(args.get("query", ""))
+        if name == "browser_research":
+            return await b.research(args.get("query", ""))
+        if name == "browser_open_result":
+            return await b.open_result(args.get("number", 0))
+        if name == "browser_read_page":
+            return await b.read_page()
+        if name == "browser_back":
+            return await b.back()
+        # browser_click: risky labels go through the same Haan/Nahi
+        # gate as file trashing (v3.17) - the gate blocks on a
+        # thread, so wrap it for the agent's async confirm callback.
+        async def _confirm_cb(question):
+            if self._confirm is None:
+                return False
+            return await asyncio.to_thread(self._confirm.ask, question)
+
+        return await b.click_text(args.get("text", ""),
+                                  confirm=_confirm_cb)
 
     async def _v317(self, name, args):
         """v3.17 port pack routing: file kaam, weather, reminders,

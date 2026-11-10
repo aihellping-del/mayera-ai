@@ -80,6 +80,7 @@ _pc = PcController()
 # v3.17 (Mark LVI port): file kaam + the UI-issued confirmation
 # gate. The gate's notify is attached below once `manager` exists;
 # a trash_file call can only proceed on the user's own tap.
+from actions.browser_agent import BrowserAgent  # noqa: E402
 from actions.file_ops import FileOps  # noqa: E402
 from core.confirm import ConfirmGate  # noqa: E402
 
@@ -96,6 +97,7 @@ tool_executor = ToolExecutor(
     store, pc=_pc, yt=YoutubePlayer(),
     vision=ScreenVision(pc=_pc),  # v3.12: JARVIS can actually SEE the screen
     files=FileOps(), confirm=confirm_gate,
+    browser=BrowserAgent(),  # v3.20: JARVIS's own personal browser
 )
 watcher = ProactiveWatcher(store)
 
