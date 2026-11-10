@@ -155,6 +155,139 @@ def function_declarations():
             parameters=types.Schema(type=types.Type.OBJECT, properties={}),
         ),
         types.FunctionDeclaration(
+            name="mouse_move",
+            description=(
+                "Move the mouse pointer on his screen by voice: "
+                "direction up/down/left/right (percent of the screen, "
+                "default 20) or 'center'. Use when he says 'mouse upar "
+                "le jao', 'thoda right karo', 'beech me le jao'."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "direction": types.Schema(
+                        type=types.Type.STRING,
+                        description="'up', 'down', 'left', 'right' or 'center'.",
+                    ),
+                    "percent": types.Schema(
+                        type=types.Type.INTEGER,
+                        description="How far, percent of screen. Small "
+                                    "adjustment 5-10, big move 40-60. Default 20.",
+                    ),
+                },
+                required=["direction"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="mouse_click",
+            description=(
+                "Click the mouse at its current position. button 'left' "
+                "(default) or 'right'; double=true for a double click "
+                "('double click karo', 'video par click karo' after "
+                "moving the mouse onto it)."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "button": types.Schema(
+                        type=types.Type.STRING,
+                        description="'left' or 'right'.",
+                    ),
+                    "double": types.Schema(
+                        type=types.Type.BOOLEAN,
+                        description="True for double click.",
+                    ),
+                },
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="mouse_scroll",
+            description=(
+                "Scroll the page under the mouse: direction 'down' "
+                "('neeche karo/scroll karo') or 'up', amount 1-20 "
+                "(default 3; 'bahut neeche' = 10+)."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "direction": types.Schema(
+                        type=types.Type.STRING,
+                        description="'up' or 'down'.",
+                    ),
+                    "amount": types.Schema(
+                        type=types.Type.INTEGER,
+                        description="Scroll amount 1-20. Default 3.",
+                    ),
+                },
+                required=["direction"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="press_key",
+            description=(
+                "Press a keyboard key. Keys: enter, space, esc, tab, "
+                "backspace, arrow keys (up/down/left/right). On YouTube "
+                "these mean: k = play/pause ('pause karo'/'chalao'), "
+                "f = fullscreen, m = mute, j = 10s peeche, l = 10s aage, "
+                "space = play/pause too."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "key": types.Schema(
+                        type=types.Type.STRING,
+                        description="The key name, e.g. 'k', 'f', 'enter'.",
+                    )
+                },
+                required=["key"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="youtube_search",
+            description=(
+                "Search YouTube and list the top 5 videos (number + "
+                "title) WITHOUT playing, so the user can choose. Use "
+                "when he asks 'kaun kaun si videos hain' or seems to "
+                "want a choice. Then call youtube_play with the same "
+                "query and the number he picks ('dusri wali')."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "query": types.Schema(
+                        type=types.Type.STRING,
+                        description="What to search on YouTube.",
+                    )
+                },
+                required=["query"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="youtube_play",
+            description=(
+                "Play a YouTube video in his browser right away. Give "
+                "the video/song name as query; number = which search "
+                "result (1 = pehli/top, default 1). Use when he names "
+                "a video or song ('Arijit ka gana chalao', 'Hanuman "
+                "Chalisa lagao') or picks a number from a list you "
+                "read out."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "query": types.Schema(
+                        type=types.Type.STRING,
+                        description="The video/song name to search.",
+                    ),
+                    "number": types.Schema(
+                        type=types.Type.INTEGER,
+                        description="Which result to play, 1-5. Default 1.",
+                    ),
+                },
+                required=["query"],
+            ),
+        ),
+        types.FunctionDeclaration(
             name="open_website",
             description=(
                 "Open a website in the user's default browser, e.g. when "
@@ -179,10 +312,11 @@ _URL_OK = re.compile(r"^(https?://)?[A-Za-z0-9.\-]+\.[A-Za-z]{2,}(/\S*)?$")
 
 
 class ToolExecutor:
-    def __init__(self, store, opener=None, pc=None):
+    def __init__(self, store, opener=None, pc=None, yt=None):
         self._store = store
         self._opener = opener or webbrowser.open
         self._pc = pc  # PcController (v3.1 PC Control pack) or None
+        self._yt = yt  # YoutubePlayer (v3.4) or None
 
     async def execute(self, name, args):
         args = args or {}
@@ -198,11 +332,15 @@ class ToolExecutor:
                     "datetime": now.strftime("%A, %d %B %Y, %I:%M %p"),
                 }
             if name in ("open_app", "close_app", "set_volume",
-                        "type_text", "take_screenshot"):
+                        "type_text", "take_screenshot", "mouse_move",
+                        "mouse_click", "mouse_scroll", "press_key"):
                 # PC actions can block briefly (process start, a
                 # PowerShell screenshot) - keep them off the event
                 # loop so live audio never stalls.
                 return await asyncio.to_thread(self._pc_action, name, args)
+            if name in ("youtube_search", "youtube_play"):
+                # A web fetch can take a second or two - same rule.
+                return await asyncio.to_thread(self._yt_action, name, args)
             if name == "open_website":
                 # webbrowser.open() blocks; run it off the event loop
                 # so it can never stall live audio forwarding (v3.0).
@@ -224,7 +362,25 @@ class ToolExecutor:
                                        args.get("steps", 3))
         if name == "type_text":
             return self._pc.type_text(args.get("text", ""))
+        if name == "mouse_move":
+            return self._pc.mouse_move(args.get("direction", ""),
+                                       args.get("percent", 20))
+        if name == "mouse_click":
+            return self._pc.mouse_click(args.get("button", "left"),
+                                        args.get("double", False))
+        if name == "mouse_scroll":
+            return self._pc.mouse_scroll(args.get("direction", "down"),
+                                         args.get("amount", 3))
+        if name == "press_key":
+            return self._pc.press_key(args.get("key", ""))
         return self._pc.take_screenshot()
+
+    def _yt_action(self, name, args):
+        if self._yt is None:
+            return {"status": "error", "message": "youtube unavailable"}
+        if name == "youtube_search":
+            return self._yt.search(args.get("query", ""))
+        return self._yt.play(args.get("query", ""), args.get("number", 1))
 
     def _remember(self, content):
         if not self._store.memory_enabled():

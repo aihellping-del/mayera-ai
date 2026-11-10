@@ -67,6 +67,16 @@ CLOSE_APPS = {
 
 _VOLUME_KEYS = {"mute": 0xAD, "up": 0xAF, "down": 0xAE}
 
+# Keys JARVIS may press by voice (fixed allowlist). The letter keys
+# double as YouTube controls: k = play/pause, f = fullscreen,
+# m = mute, j/l = seek back/forward.
+_PRESS_KEYS = {
+    "enter": 0x0D, "space": 0x20, "esc": 0x1B, "escape": 0x1B,
+    "tab": 0x09, "backspace": 0x08,
+    "up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27,
+    "k": 0x4B, "f": 0x46, "m": 0x4D, "j": 0x4A, "l": 0x4C,
+}
+
 
 def _default_runner(cmd):
     subprocess.run(cmd, timeout=20, check=False,
@@ -125,9 +135,72 @@ def _default_screenshot(path):
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def _default_mover(direction, percent):
+    """Move the mouse by a percent of the screen (or to the centre).
+    Returns the new (x, y) position."""
+    import ctypes
+
+    class _Point(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+    user32 = ctypes.windll.user32
+    width = user32.GetSystemMetrics(0)
+    height = user32.GetSystemMetrics(1)
+    pt = _Point()
+    user32.GetCursorPos(ctypes.byref(pt))
+    x, y = pt.x, pt.y
+    if direction == "center":
+        x, y = width // 2, height // 2
+    else:
+        if direction == "left":
+            x -= int(width * percent / 100)
+        elif direction == "right":
+            x += int(width * percent / 100)
+        elif direction == "up":
+            y -= int(height * percent / 100)
+        elif direction == "down":
+            y += int(height * percent / 100)
+    x = max(0, min(width - 1, x))
+    y = max(0, min(height - 1, y))
+    user32.SetCursorPos(x, y)
+    return (x, y)
+
+
+def _default_clicker(button, double):
+    import ctypes
+    import time
+    user32 = ctypes.windll.user32
+    down, up = ((0x0002, 0x0004) if button == "left"
+                else (0x0008, 0x0010))
+
+    def _once():
+        user32.mouse_event(down, 0, 0, 0, 0)
+        user32.mouse_event(up, 0, 0, 0, 0)
+
+    _once()
+    if double:
+        time.sleep(0.09)
+        _once()
+
+
+def _default_scroller(direction, amount):
+    import ctypes
+    delta = 120 * amount * (1 if direction == "up" else -1)
+    ctypes.windll.user32.mouse_event(0x0800, 0, 0, delta, 0)  # MOUSEEVENTF_WHEEL
+
+
+def _default_keyer(key):
+    import ctypes
+    vk = _PRESS_KEYS[key]
+    user32 = ctypes.windll.user32
+    user32.keybd_event(vk, 0, 0, 0)
+    user32.keybd_event(vk, 0, 2, 0)
+
+
 class PcController:
     def __init__(self, is_windows=None, runner=None, volumer=None,
-                 typer=None, shooter=None, opener=None, home=None):
+                 typer=None, shooter=None, opener=None, home=None,
+                 mover=None, clicker=None, scroller=None, keyer=None):
         self._win = (sys.platform.startswith("win")
                      if is_windows is None else is_windows)
         self._runner = runner or _default_runner
@@ -136,6 +209,10 @@ class PcController:
         self._shooter = shooter or _default_screenshot
         self._opener = opener or webbrowser.open
         self._home = Path(home) if home else Path.home()
+        self._mover = mover or _default_mover
+        self._clicker = clicker or _default_clicker
+        self._scroller = scroller or _default_scroller
+        self._keyer = keyer or _default_keyer
 
     def _guard(self):
         if not self._win:
@@ -199,6 +276,65 @@ class PcController:
             text = text[:2000]
         self._typer(text)
         return {"status": "typed", "chars": len(text)}
+
+    # ------------------------------------------------------------------
+    # Mouse + keys (v3.4): he points with his voice - "mouse upar le
+    # jao", "click karo", "neeche scroll karo" - and drives YouTube
+    # with k (play/pause), f (fullscreen), j/l (seek).
+    # ------------------------------------------------------------------
+    def mouse_move(self, direction, percent=20):
+        blocked = self._guard()
+        if blocked:
+            return blocked
+        direction = (direction or "").strip().lower()
+        if direction not in ("up", "down", "left", "right", "center"):
+            return {"status": "error",
+                    "message": "direction up/down/left/right/center ho"}
+        try:
+            percent = max(1, min(90, int(percent)))
+        except (TypeError, ValueError):
+            percent = 20
+        pos = self._mover(direction, percent)
+        return {"status": "moved", "direction": direction,
+                "percent": percent, "position": list(pos) if pos else None}
+
+    def mouse_click(self, button="left", double=False):
+        blocked = self._guard()
+        if blocked:
+            return blocked
+        button = (button or "left").strip().lower()
+        if button not in ("left", "right"):
+            return {"status": "error", "message": "button left/right ho"}
+        self._clicker(button, bool(double))
+        return {"status": "clicked", "button": button,
+                "double": bool(double)}
+
+    def mouse_scroll(self, direction="down", amount=3):
+        blocked = self._guard()
+        if blocked:
+            return blocked
+        direction = (direction or "down").strip().lower()
+        if direction not in ("up", "down"):
+            return {"status": "error", "message": "direction up/down ho"}
+        try:
+            amount = max(1, min(20, int(amount)))
+        except (TypeError, ValueError):
+            amount = 3
+        self._scroller(direction, amount)
+        return {"status": "scrolled", "direction": direction,
+                "amount": amount}
+
+    def press_key(self, key):
+        blocked = self._guard()
+        if blocked:
+            return blocked
+        key = (key or "").strip().lower()
+        if key not in _PRESS_KEYS:
+            return {"status": "error",
+                    "message": "ye key meri list me nahi hai: "
+                               + ", ".join(sorted(set(_PRESS_KEYS)))}
+        self._keyer(key)
+        return {"status": "pressed", "key": key}
 
     def take_screenshot(self):
         blocked = self._guard()

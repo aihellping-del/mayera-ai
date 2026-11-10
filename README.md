@@ -18,6 +18,9 @@
 - **PC Control (v3.1):** by voice she can open/close apps ("Chrome
   kholo", "Notepad band karo"), change volume, type text you dictate
   into the front window, and take a screenshot (saved to Pictures).
+  v3.4 adds voice mouse control (move/click/scroll/keys) and
+  YouTube by voice: name any video/song to play it, or hear the
+  top-5 results and pick a number.
   Safety: a fixed app allowlist only — Explorer and MAYERA herself can
   never be closed, and there is no shutdown/delete tool at all.
 - **Emotional intelligence:** she reads your tone — happy, sad, angry,

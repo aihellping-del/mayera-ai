@@ -339,3 +339,17 @@ folder, START_MAYERA.bat filename, mayera_memory.db, key.dat, env
 var names and the GitHub repo - so his key, memories and auto-update
 keep working untouched. Checks: instruction/voice asserts, /health,
 JARVIS UI served, mood detection, PC-control spot checks - all pass.
+
+--- v3.4.0 addendum (2026-11-10): VOICE MOUSE + YOUTUBE BY VOICE ---
+User asked: mouse control by voice, so any YouTube video can be
+selected. (1) pc_control gains mouse_move (direction/percent/center),
+mouse_click (left/right, double), mouse_scroll, press_key - all
+ctypes on Windows, all injectable; key allowlist doubles as YouTube
+controls (k play/pause, f fullscreen, m mute, j/l seek). (2) New
+mayera/youtube_play.py: search reads the public results page with
+stdlib urllib (no API key), returns the top-5 titles; play opens the
+chosen result's watch URL directly, so "Arijit ka gana chalao" just
+plays, and "dusri wali" picks result 2. Failures (network/markup)
+return clean errors. 24/24 tests pass (fake OS layer, fake results
+page with dedupe/title-cleaning, executor routing for all 6 new
+tools; 15 declarations total) + app wiring and /health verified.

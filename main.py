@@ -57,6 +57,7 @@ from mayera.memory_store import MemoryStore
 from mayera.pc_control import PcController
 from mayera.proactive import ProactiveWatcher
 from mayera.tools import ToolExecutor
+from mayera.youtube_play import YoutubePlayer
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -69,7 +70,7 @@ log = logging.getLogger("mayera")
 
 manager = ConnectionManager()
 store = MemoryStore()
-tool_executor = ToolExecutor(store, pc=PcController())
+tool_executor = ToolExecutor(store, pc=PcController(), yt=YoutubePlayer())
 watcher = ProactiveWatcher(store)
 
 live_session: GeminiLiveSession | None = None
