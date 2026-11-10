@@ -292,3 +292,17 @@ which also can never fire while MAYERA is merely idle after a
 finished reply; the START handler also resets all voice state per
 call. Verified against the real watchdog loop: fires while awaiting
 a reply, silent when idle; all 15 v3.0 behaviour tests still pass.
+
+--- v3.1.0 addendum (2026-11-10): PC CONTROL pack (user pick "A") ---
+New module mayera/pc_control.py + 5 new voice tools (open_app,
+close_app, set_volume, type_text, take_screenshot; 9 declarations
+total). Allowlist-only by design: unknown apps are refused, Explorer
+and MAYERA/Python can never be closed, and there is deliberately no
+shutdown/restart/delete tool. Volume = hardware media keys (ctypes),
+typing = clipboard + Ctrl+V (Unicode/Hindi safe), screenshot =
+PowerShell/.NET capture to Pictures, opened afterwards. All OS
+effects are injectable: 20/20 unit tests pass with a fake OS layer
+(mapping, aliases, clamps, refusals, executor routing, off-Windows
+clean "unsupported"). PC actions run via asyncio.to_thread so they
+cannot stall live audio. The Windows-only effectors (ctypes volume/
+typing, PowerShell capture) can only be exercised on the user's PC.

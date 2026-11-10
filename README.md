@@ -15,6 +15,11 @@
 - **Voice tools (function calling):** remember / forget / current time /
   open a website in your browser — plus Google Search grounding for
   fresh facts instead of guessing.
+- **PC Control (v3.1):** by voice she can open/close apps ("Chrome
+  kholo", "Notepad band karo"), change volume, type text you dictate
+  into the front window, and take a screenshot (saved to Pictures).
+  Safety: a fixed app allowlist only — Explorer and MAYERA herself can
+  never be closed, and there is no shutdown/delete tool at all.
 - **Emotional intelligence:** she reads your tone — happy, sad, angry,
   joking, confused — and adapts her voice and words to match.
 - **STOP command:** say *"ruk jao"* / *"stop"* and she stops instantly.

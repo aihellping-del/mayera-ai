@@ -67,6 +67,94 @@ def function_declarations():
             parameters=types.Schema(type=types.Type.OBJECT, properties={}),
         ),
         types.FunctionDeclaration(
+            name="open_app",
+            description=(
+                "Open an app on the user's Windows PC. Use when the user "
+                "says 'Chrome kholo', 'open Notepad', 'Calculator kholo'. "
+                "Known apps: chrome, edge, firefox, notepad, calculator, "
+                "paint, explorer (files), wordpad, task manager, settings, "
+                "control panel, snipping tool, camera."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "app": types.Schema(
+                        type=types.Type.STRING,
+                        description="The app name the user asked for.",
+                    )
+                },
+                required=["app"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="close_app",
+            description=(
+                "Close an app on the user's PC ('Notepad band karo'). "
+                "Same app names as open_app, except explorer/files can "
+                "never be closed. Never close apps the user did not name."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "app": types.Schema(
+                        type=types.Type.STRING,
+                        description="The app name the user asked to close.",
+                    )
+                },
+                required=["app"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="set_volume",
+            description=(
+                "Change the PC volume: action 'up' (awaz badhao), 'down' "
+                "(awaz kam karo) or 'mute' (awaz band). steps = how many "
+                "volume steps, usually 3; use more when he says 'bahut "
+                "badhao' (e.g. 8)."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "action": types.Schema(
+                        type=types.Type.STRING,
+                        description="'up', 'down' or 'mute'.",
+                    ),
+                    "steps": types.Schema(
+                        type=types.Type.INTEGER,
+                        description="Volume steps, 1-20. Default 3.",
+                    ),
+                },
+                required=["action"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="type_text",
+            description=(
+                "Type text the user dictates into the window currently "
+                "in front on his PC (e.g. he opened Notepad and says "
+                "'likho: ...'). Pass the exact text to type."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "text": types.Schema(
+                        type=types.Type.STRING,
+                        description="The exact text to type.",
+                    )
+                },
+                required=["text"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="take_screenshot",
+            description=(
+                "Take a screenshot of the user's PC screen. It is saved "
+                "in his Pictures folder and opened for him. Use when he "
+                "says 'screenshot lo'."
+            ),
+            parameters=types.Schema(type=types.Type.OBJECT, properties={}),
+        ),
+        types.FunctionDeclaration(
             name="open_website",
             description=(
                 "Open a website in the user's default browser, e.g. when "
@@ -91,9 +179,10 @@ _URL_OK = re.compile(r"^(https?://)?[A-Za-z0-9.\-]+\.[A-Za-z]{2,}(/\S*)?$")
 
 
 class ToolExecutor:
-    def __init__(self, store, opener=None):
+    def __init__(self, store, opener=None, pc=None):
         self._store = store
         self._opener = opener or webbrowser.open
+        self._pc = pc  # PcController (v3.1 PC Control pack) or None
 
     async def execute(self, name, args):
         args = args or {}
@@ -108,6 +197,12 @@ class ToolExecutor:
                     "status": "ok",
                     "datetime": now.strftime("%A, %d %B %Y, %I:%M %p"),
                 }
+            if name in ("open_app", "close_app", "set_volume",
+                        "type_text", "take_screenshot"):
+                # PC actions can block briefly (process start, a
+                # PowerShell screenshot) - keep them off the event
+                # loop so live audio never stalls.
+                return await asyncio.to_thread(self._pc_action, name, args)
             if name == "open_website":
                 # webbrowser.open() blocks; run it off the event loop
                 # so it can never stall live audio forwarding (v3.0).
@@ -117,6 +212,20 @@ class ToolExecutor:
             return {"status": "error", "message": exc.__class__.__name__}
 
     # ------------------------------------------------------------------
+    def _pc_action(self, name, args):
+        if self._pc is None:
+            return {"status": "error", "message": "pc control unavailable"}
+        if name == "open_app":
+            return self._pc.open_app(args.get("app", ""))
+        if name == "close_app":
+            return self._pc.close_app(args.get("app", ""))
+        if name == "set_volume":
+            return self._pc.set_volume(args.get("action", ""),
+                                       args.get("steps", 3))
+        if name == "type_text":
+            return self._pc.type_text(args.get("text", ""))
+        return self._pc.take_screenshot()
+
     def _remember(self, content):
         if not self._store.memory_enabled():
             return {"status": "disabled",

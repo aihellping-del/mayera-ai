@@ -15,6 +15,7 @@ mayera/gemini_live.py
 mayera/key_vault.py
 mayera/key_prompt_gui.py
 mayera/memory_store.py
+mayera/pc_control.py
 mayera/proactive.py
 mayera/tools.py
 requirements.txt

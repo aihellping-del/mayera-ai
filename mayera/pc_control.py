@@ -1,0 +1,217 @@
+"""MAYERA - PC control (v3.1, user-picked "PC Control pack").
+
+MAYERA can operate Golu's own Windows PC by voice:
+
+  * open_app(app)     - open an allowlisted app (Chrome, Notepad, ...)
+  * close_app(app)    - close an allowlisted app (never Explorer,
+                        never MAYERA/Python itself)
+  * set_volume(...)   - volume up / down / mute via media keys
+  * type_text(text)   - paste-type dictated text into the window in
+                        front (clipboard + Ctrl+V, works for Hindi too)
+  * take_screenshot() - save a PNG of the screen to Pictures and open it
+
+Safety by design: only the fixed allowlists below can ever run - the
+model cannot invent commands, and there is deliberately NO shutdown /
+restart / delete-anything tool (a misheard word must never cost work).
+Everything OS-specific is injectable, so the logic is fully testable
+off-Windows; on non-Windows every action returns a clean "sirf
+Windows par" result instead of failing.
+"""
+
+import datetime
+import subprocess
+import sys
+import webbrowser
+from pathlib import Path
+
+# alias -> target passed to Windows `start`
+OPEN_APPS = {
+    "chrome": "chrome",
+    "google chrome": "chrome",
+    "edge": "msedge",
+    "microsoft edge": "msedge",
+    "firefox": "firefox",
+    "notepad": "notepad",
+    "calculator": "calc",
+    "calc": "calc",
+    "paint": "mspaint",
+    "explorer": "explorer",
+    "file explorer": "explorer",
+    "files": "explorer",
+    "my computer": "explorer",
+    "wordpad": "write",
+    "task manager": "taskmgr",
+    "settings": "ms-settings:",
+    "control panel": "control",
+    "snipping tool": "snippingtool",
+    "camera": "microsoft.windows.camera:",
+}
+
+# alias -> process image name for taskkill. Explorer is NOT here on
+# purpose (closing it kills the taskbar/desktop), and neither is
+# anything MAYERA herself runs on.
+CLOSE_APPS = {
+    "chrome": "chrome.exe",
+    "google chrome": "chrome.exe",
+    "edge": "msedge.exe",
+    "microsoft edge": "msedge.exe",
+    "firefox": "firefox.exe",
+    "notepad": "notepad.exe",
+    "calculator": "CalculatorApp.exe",
+    "calc": "CalculatorApp.exe",
+    "paint": "mspaint.exe",
+    "wordpad": "write.exe",
+    "snipping tool": "SnippingTool.exe",
+    "camera": "WindowsCamera.exe",
+}
+
+_VOLUME_KEYS = {"mute": 0xAD, "up": 0xAF, "down": 0xAE}
+
+
+def _default_runner(cmd):
+    subprocess.run(cmd, timeout=20, check=False,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def _default_volume(action, steps):
+    """Press the hardware volume keys (works everywhere on Windows)."""
+    import ctypes
+    user32 = ctypes.windll.user32
+    code = _VOLUME_KEYS[action]
+    presses = 1 if action == "mute" else steps
+    for _ in range(presses):
+        user32.keybd_event(code, 0, 0, 0)
+        user32.keybd_event(code, 0, 2, 0)  # KEYEVENTF_KEYUP
+
+
+def _default_typer(text):
+    """Put the text on the clipboard and press Ctrl+V in the front
+    window - far more reliable than simulated keystrokes, and it
+    handles Hindi/Unicode text correctly."""
+    import ctypes
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    kernel32.GlobalAlloc.restype = ctypes.c_void_p
+    kernel32.GlobalLock.restype = ctypes.c_void_p
+    data = text.encode("utf-16-le") + b"\x00\x00"
+    handle = kernel32.GlobalAlloc(0x0002, len(data))  # GMEM_MOVEABLE
+    ptr = kernel32.GlobalLock(handle)
+    ctypes.memmove(ptr, data, len(data))
+    kernel32.GlobalUnlock(handle)
+    if not user32.OpenClipboard(0):
+        raise OSError("clipboard busy")
+    try:
+        user32.EmptyClipboard()
+        user32.SetClipboardData(13, handle)  # CF_UNICODETEXT
+    finally:
+        user32.CloseClipboard()
+    for vk, flags in ((0x11, 0), (0x56, 0), (0x56, 2), (0x11, 2)):
+        user32.keybd_event(vk, 0, flags, 0)  # Ctrl down, V down, V up, Ctrl up
+
+
+def _default_screenshot(path):
+    """Capture the primary screen to a PNG via PowerShell/.NET -
+    no third-party dependency needed."""
+    ps = (
+        "Add-Type -AssemblyName System.Windows.Forms,System.Drawing;"
+        "$s=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds;"
+        "$b=New-Object System.Drawing.Bitmap($s.Width,$s.Height);"
+        "$g=[System.Drawing.Graphics]::FromImage($b);"
+        "$g.CopyFromScreen($s.Location,[System.Drawing.Point]::Empty,$s.Size);"
+        f"$b.Save('{path}',[System.Drawing.Imaging.ImageFormat]::Png)"
+    )
+    subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                   timeout=25, check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+class PcController:
+    def __init__(self, is_windows=None, runner=None, volumer=None,
+                 typer=None, shooter=None, opener=None, home=None):
+        self._win = (sys.platform.startswith("win")
+                     if is_windows is None else is_windows)
+        self._runner = runner or _default_runner
+        self._volumer = volumer or _default_volume
+        self._typer = typer or _default_typer
+        self._shooter = shooter or _default_screenshot
+        self._opener = opener or webbrowser.open
+        self._home = Path(home) if home else Path.home()
+
+    def _guard(self):
+        if not self._win:
+            return {"status": "unsupported",
+                    "message": "PC control sirf Windows par chalta hai."}
+        return None
+
+    @staticmethod
+    def _norm(app):
+        return " ".join((app or "").strip().lower().split())
+
+    # ------------------------------------------------------------------
+    def open_app(self, app):
+        blocked = self._guard()
+        if blocked:
+            return blocked
+        target = OPEN_APPS.get(self._norm(app))
+        if target is None:
+            return {"status": "error",
+                    "message": f"'{app}' meri list me nahi hai. List: "
+                               + ", ".join(sorted(set(OPEN_APPS)))}
+        self._runner(["cmd", "/c", "start", "", target])
+        return {"status": "opened", "app": app}
+
+    def close_app(self, app):
+        blocked = self._guard()
+        if blocked:
+            return blocked
+        image = CLOSE_APPS.get(self._norm(app))
+        if image is None:
+            return {"status": "error",
+                    "message": f"'{app}' ko band karna meri list me nahi "
+                               "hai (Explorer aur MAYERA khud kabhi band "
+                               "nahi hote)."}
+        self._runner(["taskkill", "/IM", image, "/F"])
+        return {"status": "closed", "app": app}
+
+    def set_volume(self, action, steps=3):
+        blocked = self._guard()
+        if blocked:
+            return blocked
+        action = (action or "").strip().lower()
+        if action not in _VOLUME_KEYS:
+            return {"status": "error",
+                    "message": "action 'up', 'down' ya 'mute' hona chahiye"}
+        try:
+            steps = max(1, min(20, int(steps)))
+        except (TypeError, ValueError):
+            steps = 3
+        self._volumer(action, steps)
+        return {"status": "ok", "action": action, "steps": steps}
+
+    def type_text(self, text):
+        blocked = self._guard()
+        if blocked:
+            return blocked
+        text = (text or "").strip()
+        if not text:
+            return {"status": "error", "message": "khaali text"}
+        if len(text) > 2000:
+            text = text[:2000]
+        self._typer(text)
+        return {"status": "typed", "chars": len(text)}
+
+    def take_screenshot(self):
+        blocked = self._guard()
+        if blocked:
+            return blocked
+        folder = self._home / "Pictures"
+        if not folder.is_dir():
+            folder = self._home
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        path = folder / f"MAYERA-screenshot-{stamp}.png"
+        self._shooter(str(path))
+        try:
+            self._opener(path.as_uri())
+        except Exception:  # noqa: BLE001 - opening it is a bonus
+            pass
+        return {"status": "saved", "path": str(path)}

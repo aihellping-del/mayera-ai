@@ -54,6 +54,7 @@ from mayera.connection_manager import ConnectionManager
 from mayera.errors import MayeraError, friendly_error
 from mayera.gemini_live import GeminiLiveSession
 from mayera.memory_store import MemoryStore
+from mayera.pc_control import PcController
 from mayera.proactive import ProactiveWatcher
 from mayera.tools import ToolExecutor
 
@@ -68,7 +69,7 @@ log = logging.getLogger("mayera")
 
 manager = ConnectionManager()
 store = MemoryStore()
-tool_executor = ToolExecutor(store)
+tool_executor = ToolExecutor(store, pc=PcController())
 watcher = ProactiveWatcher(store)
 
 live_session: GeminiLiveSession | None = None
