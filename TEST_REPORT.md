@@ -1110,3 +1110,23 @@ needs_app + web fallback, unknown contact) + regressions
 (whatsapp web 11/11, mouse 11/11, focus 15/15, notepad 42/42,
 screen-click 13/13, browser 18/18, noise 13/13, port 36/36)
 + server smoke.
+
+--- v3.28.0 addendum (2026-11-10): NO IMPROVISATION + STUTTER
+GUARD (FROM HIS 16:17 TERMINAL SCREENSHOT) ---
+His screenshot PROVES the WhatsApp failure mode: whatsapp_send
+was never called. The model improvised - open_app(chrome),
+open_website('whatsapp.com'), look_at_screen('show whatsapp
+screen') - i.e. that session had no working WhatsApp route in
+play (pre-v3.25 session and/or model dodging the tool).
+Fix: the instruction now states WhatsApp ka SIRF whatsapp_send
+hi raasta hai - open_website se whatsapp.com kholna ya app khol
+kar khud bhejne ki koshish kabhi mat karo (appended to the
+WHATSAPP paragraph). His second complaint in the same message:
+'kabhi kabhi halka ruk ruk ke baat karta hai' - playback cushion
+raised 70 -> 110 ms start, floor 40 -> 60 (max 300 unchanged):
++40 ms of wait buys gap-free speech on his jittery laptop; the
+starvation auto-grow already existed but started too thin.
+Log latencies otherwise healthy: 0.84/2.80/2.94/1.17 plain,
+spikes only on tool turns (15.97 = the look_at_screen turn).
+Tests: Node playback 11/11 (expectations 0.07/0.17 -> 0.11/0.21),
+whatsapp desktop 11/11, whatsapp web 11/11, server smoke.
