@@ -26,6 +26,22 @@ let wsReconnectTimer = null;
 let callActive = false;
 let micMuted = false;
 
+// Push-to-Talk (v3.15): when ON, the mic only sends while
+// Ctrl+Space is held - held state comes from this page's own keys
+// (window scope) or from the server (Windows-global via the
+// `keyboard` package, forwarded as {"type":"ptt"} messages).
+let pttEnabled = false;
+let pttHeld = false;
+window.addEventListener("keydown", (e) => {
+  if (pttEnabled && e.ctrlKey && e.code === "Space") {
+    e.preventDefault();
+    pttHeld = true;
+  }
+});
+window.addEventListener("keyup", (e) => {
+  if (e.code === "Space") pttHeld = false;
+});
+
 // --- microphone graph ---
 let micCtx = null, micStream = null, micProcessor = null, micSource = null, micSink = null;
 
@@ -106,6 +122,7 @@ function connectWS() {
       try { msg = JSON.parse(ev.data); } catch { return; }
       if (msg.type === "status") setState(msg.state, msg.message);
       else if (msg.type === "interrupted") flushPlayback();
+      else if (msg.type === "ptt") pttHeld = !!msg.active;
     } else {
       playAiAudio(ev.data);
     }
@@ -170,9 +187,12 @@ function rmsOf(floats) {
 }
 
 async function startMicrophone() {
-  micStream = await navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-  });
+  // Audio device picker (v3.15): the mic chosen in Settings, by
+  // deviceId, when one is saved - otherwise the OS default.
+  const savedMic = localStorage.getItem("jarvis_mic_device") || "";
+  const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+  if (savedMic) audio.deviceId = { exact: savedMic };
+  micStream = await navigator.mediaDevices.getUserMedia({ audio });
   micCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: MIC_RATE });
   micSource = micCtx.createMediaStreamSource(micStream);
   // 1024 samples @16 kHz = 64 ms per chunk (v3.14; was 2048 = 128 ms,
@@ -186,6 +206,7 @@ async function startMicrophone() {
     const r = rmsOf(raw);
     micLevel = Math.max(micLevel, Math.min(1, r * 3));
     if (!callActive || micMuted) return;
+    if (pttEnabled && !pttHeld) return; // Push-to-Talk: key dabao tabhi mic
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     // Echo guard (v3.10): while JARVIS's own voice is still playing
     // from the speakers (+300 ms tail), send the mic SOFTLY (x0.35)
@@ -227,6 +248,12 @@ function ensurePlayCtx() {
     catch { playCtx = new (window.AudioContext || window.webkitAudioContext)(); }
   }
   if (playCtx.state === "suspended") playCtx.resume();
+  // Speaker picker (v3.15): route output to the chosen device when
+  // the browser supports setSinkId; silently keep the default else.
+  const savedSpk = localStorage.getItem("jarvis_speaker_device") || "";
+  if (savedSpk && typeof playCtx.setSinkId === "function") {
+    playCtx.setSinkId(savedSpk).catch(() => {});
+  }
   return playCtx;
 }
 
@@ -425,6 +452,15 @@ async function refreshMemPill() {
 refreshMemPill();
 setInterval(refreshMemPill, 15000);
 
+// Push-to-Talk state must be right from page load, not only after
+// the drawer is opened once.
+(async () => {
+  try {
+    const s = await (await fetch("/api/settings")).json();
+    pttEnabled = s.push_to_talk === "1";
+  } catch {}
+})();
+
 async function refreshDiag() {
   const box = $("diagBox");
   if (!box) return;
@@ -453,6 +489,9 @@ async function openDrawer() {
     $("setInactivity").value = s.inactivity_seconds || "120";
     $("setReplySpeed").value = s.reply_speed || "fast";
     $("setWebSearch").checked = s.web_search === "1";
+    $("setPTT").checked = s.push_to_talk === "1";
+    pttEnabled = s.push_to_talk === "1";
+    populateDevices();
     $("setQuietStart").value = s.quiet_start || "23:00";
     $("setQuietEnd").value = s.quiet_end || "07:00";
     await renderMemList();
@@ -475,6 +514,7 @@ async function saveSettings() {
     inactivity_seconds: $("setInactivity").value,
     reply_speed: $("setReplySpeed").value,
     web_search: $("setWebSearch").checked ? "1" : "0",
+    push_to_talk: $("setPTT").checked ? "1" : "0",
     quiet_start: $("setQuietStart").value || "23:00",
     quiet_end: $("setQuietEnd").value || "07:00",
   };
@@ -487,8 +527,51 @@ async function saveSettings() {
   } catch {}
   refreshMemPill();
 }
-["setMemory", "setProactive", "setInactivity", "setQuietStart", "setQuietEnd", "setReplySpeed", "setWebSearch"]
-  .forEach((id) => $(id).addEventListener("change", saveSettings));
+["setMemory", "setProactive", "setInactivity", "setQuietStart", "setQuietEnd", "setReplySpeed", "setWebSearch", "setPTT"]
+  .forEach((id) => $(id).addEventListener("change", () => {
+    saveSettings();
+    pttEnabled = $("setPTT").checked;
+    if (pttEnabled) setState("listening", "Push-to-Talk ON - Ctrl+Space dabakar rakho aur bolo");
+  }));
+
+/* Audio device picker (v3.15): list the devices the OS/browser
+   actually exposes; names appear only after mic permission, which
+   is the browser's own privacy rule. Choices persist locally and
+   apply from the next START (mic) / immediately (speaker). */
+async function populateDevices() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const fill = (selectId, kind, savedKey, fallbackLabel) => {
+      const sel = $(selectId);
+      if (!sel) return;
+      const saved = localStorage.getItem(savedKey) || "";
+      sel.innerHTML = "";
+      const def = document.createElement("option");
+      def.value = "";
+      def.textContent = fallbackLabel;
+      sel.appendChild(def);
+      let n = 0;
+      devices.filter((d) => d.kind === kind).forEach((d) => {
+        n++;
+        const opt = document.createElement("option");
+        opt.value = d.deviceId;
+        opt.textContent = d.label || `${fallbackLabel} ${n}`;
+        sel.appendChild(opt);
+      });
+      sel.value = saved;
+    };
+    fill("setMicDevice", "audioinput", "jarvis_mic_device", "Default mic");
+    fill("setSpeakerDevice", "audiooutput", "jarvis_speaker_device", "Default speaker");
+  } catch {}
+}
+$("setMicDevice").addEventListener("change", () => {
+  localStorage.setItem("jarvis_mic_device", $("setMicDevice").value);
+});
+$("setSpeakerDevice").addEventListener("change", () => {
+  localStorage.setItem("jarvis_speaker_device", $("setSpeakerDevice").value);
+  if (playCtx) ensurePlayCtx();
+});
 
 async function renderMemList() {
   const box = $("memList");
@@ -503,7 +586,12 @@ async function renderMemList() {
       const row = document.createElement("div");
       row.className = "mem-item";
       const txt = document.createElement("span");
-      txt.textContent = m.content;
+      // Memory panel (v3.15): show WHEN each fact was learned too.
+      const when = m.created_at
+        ? new Date(m.created_at * 1000).toLocaleDateString("en-IN",
+            { day: "numeric", month: "short" })
+        : "";
+      txt.textContent = when ? `${m.content}  ·  ${when}` : m.content;
       const del = document.createElement("button");
       del.textContent = "Mita do";
       del.addEventListener("click", async () => {

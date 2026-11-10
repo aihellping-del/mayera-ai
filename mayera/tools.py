@@ -24,7 +24,7 @@ from google.genai import types
 
 
 def function_declarations():
-    return [
+    decls = [
         types.FunctionDeclaration(
             name="remember_this",
             description=(
@@ -42,6 +42,29 @@ def function_declarations():
                     )
                 },
                 required=["content"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="recall_memory",
+            description=(
+                "Search ALL of the user's stored memories by keyword "
+                "and bring back matches. Use when he refers to "
+                "something older ('maine tumhe pehle bataya tha...', "
+                "'meri pasand kya hai?') or when a fact you need is "
+                "not in your current context - your prompt only "
+                "carries the newest memories, this searches "
+                "everything, so never say 'mujhe nahi pata' about his "
+                "stored facts without recalling first."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "query": types.Schema(
+                        type=types.Type.STRING,
+                        description="Keywords to search his memories for.",
+                    )
+                },
+                required=["query"],
             ),
         ),
         types.FunctionDeclaration(
@@ -394,24 +417,48 @@ def function_declarations():
             ),
         ),
     ]
+    # Self-describing plugins (v3.15): whatever skills were dropped
+    # into plugins/ are declared alongside the built-in tools.
+    try:
+        from . import plugins_loader
+        plugin_decls, _handlers = plugins_loader.discover()
+        decls.extend(plugin_decls)
+    except Exception:  # noqa: BLE001 - plugins never break the built-ins
+        pass
+    return decls
 
 
 _URL_OK = re.compile(r"^(https?://)?[A-Za-z0-9.\-]+\.[A-Za-z]{2,}(/\S*)?$")
 
 
 class ToolExecutor:
-    def __init__(self, store, opener=None, pc=None, yt=None, vision=None):
+    def __init__(self, store, opener=None, pc=None, yt=None, vision=None,
+                 plugins=None):
         self._store = store
         self._opener = opener or webbrowser.open
         self._pc = pc  # PcController (v3.1 PC Control pack) or None
         self._yt = yt  # YoutubePlayer (v3.4) or None
         self._vision = vision  # ScreenVision (v3.12) or None
+        if plugins is None:
+            try:
+                from . import plugins_loader
+                _decls, plugins = plugins_loader.discover()
+            except Exception:  # noqa: BLE001
+                plugins = {}
+        self._plugins = plugins or {}
 
     async def execute(self, name, args):
         args = args or {}
         try:
             if name == "remember_this":
                 return self._remember(args.get("content", ""))
+            if name == "recall_memory":
+                return self._recall(args.get("query", ""))
+            if name in self._plugins:
+                # Plugin handlers are plain sync Python - run them
+                # in a thread so a slow plugin never stalls audio.
+                return await asyncio.to_thread(
+                    self._run_plugin, name, args)
             if name == "forget_memory":
                 return self._forget(args.get("query", ""))
             if name == "get_current_time":
@@ -499,6 +546,24 @@ class ToolExecutor:
         if result is None:
             return {"status": "error", "message": "empty content"}
         return {"status": "saved", "id": result}
+
+    def _recall(self, query):
+        if not self._store.memory_enabled():
+            return {"status": "disabled",
+                    "message": "Memory is switched off in settings."}
+        found = self._store.search_memories(query, limit=8)
+        return {"status": "ok", "count": len(found),
+                "memories": [m["content"] for m in found]}
+
+    def _run_plugin(self, name, args):
+        try:
+            result = self._plugins[name](args)
+            if isinstance(result, dict):
+                return result
+            return {"status": "ok", "result": result}
+        except Exception as exc:  # noqa: BLE001 - reported to the model
+            return {"status": "error",
+                    "message": f"plugin {name}: {exc.__class__.__name__}"}
 
     def _forget(self, query):
         count = self._store.delete_matching(query)

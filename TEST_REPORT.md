@@ -699,3 +699,66 @@ spikes on tool turns). The structural causes of those spikes
 (inline tools, blocked sends, zero jitter buffer) are exactly what
 this version removes; his next [latency] + Diagnostics screenshot
 is the real before/after proof.
+
+--- v3.15.0 addendum (2026-11-10): FEATURE LIST PACK (user pasted 24 features) ---
+Gap analysis was done feature by feature. ALREADY PRESENT (verified,
+not rebuilt): Self-Echo Guard (v3.10 ducking + no-repeat rules),
+Session Continuity (resumption + checkpoint), Memory Panel (drawer
+list + one-click delete), Model Ladder (4 Live models, last-success
+first = measured order), Real Confirmation (voice confirmation rule;
+no delete/send/pay/shutdown tools exist to confirm), Face-as-Status
+equivalent (Rainbow Flow line = green live / red error + thinking
+states), Language mirroring.
+BUILT in v3.15:
+(1) REASONING STAYS PRIVATE: strip_think() in gemini_live removes
+<think>...</think> (and unclosed tails) from the model's output
+transcription before it can reach the checkpoint, the session
+summary or on_ai_text - reasoning can no longer be treated as the
+spoken answer or pollute later context. Instruction also forbids
+voicing reasoning.
+(2) RUNTIME SELF-KNOWLEDGE: _self_knowledge() generates a block
+fresh each session (name, live version.txt, OS, the ACTUAL tool
+list incl. plugins, and the hard limits - no delete/send/pay/
+shutdown tools) appended to the instruction.
+(3) PLUGIN SYSTEM + SELF-DESCRIBING SKILLS: mayera/plugins_loader.py
+auto-discovers plugins/*.py at launch; a plugin is one file with a
+TOOL dict + handle(args); broken plugins print [plugin] and are
+skipped, '_' prefix disables; handlers run via to_thread. Ships
+plugins/dice_plugin.py (roll_dice) + plugins/README.txt (how-to in
+Hinglish). Declarations 18 -> 20.
+(4) RECALLABLE MEMORY: MemoryStore.search_memories + recall_memory
+tool - the prompt still carries the newest 30, but ANY stored fact
+is now searchable on demand; nothing saved is out of reach.
+(5) INSTANT ACKNOWLEDGMENT: heavy tools (look_at_screen, YouTube,
+open_app, screenshot) instantly flip the UI to a working status
+("Screen dekh raha hai..."), and the instruction tells JARVIS to
+speak a one-line filler ('ek second, dekh raha hu') before heavy
+tools - never for instant ones.
+(6) PUSH-TO-TALK: Settings toggle (push_to_talk). Browser gates mic
+sending unless Ctrl+Space is held (page keys = window scope; on
+Windows the server's `keyboard` hooks forward global Ctrl+Space as
+{type:ptt} messages). Default OFF - normal always-listening is
+unchanged until he turns it on.
+(7) AUDIO DEVICE PICKER: Settings selects for mic + speaker from
+enumerateDevices (names appear after mic permission - the browser's
+rule), saved in localStorage, mic applied at START via deviceId,
+speaker via setSinkId when supported.
+(8) Memory panel now shows the date each fact was learned.
+NOT BUILT (honest, with reasons): Holographic Avatar + lip-sync +
+facial acting (a whole new UI project; his chosen UI is Rainbow
+Flow - offered as a separate pick, not faked on top), Wake Word
+(true local detection needs an offline wake-word engine; Chrome's
+SpeechRecognition is NOT local - it streams to Google, so calling
+it 'local' would be a lie), Gemini 3.1 Flash Live (not in the
+verified Live model list available to this key/SDK - the ladder
+keeps proven rungs; a name is added only when it actually
+connects), Choose-Your-Engine / local STT-LLM-TTS / Ollama etc.
+(a second engine is its own project; his 12 GB laptop caps local
+models at ~8B), Video on the HUD and Undo (no file-moving tools
+exist yet for Undo to reverse; HUD video conflicts with the
+YouTube press-key flow - both are separate picks).
+Tests: 31/31 new (~/workspace/test_feature_pack.py) + Playwright
+drawer smoke (PTT toggle saves push_to_talk=1, device selects
+render, 0 JS errors) + regressions 12/12 + 14/14 + 15/15 + 8/8 +
+49/49 + 42/42 + 13/13 + Node playback 11/11 (counts updated
+18 -> 20 declarations in two suites).

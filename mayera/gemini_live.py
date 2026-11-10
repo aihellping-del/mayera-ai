@@ -21,8 +21,11 @@ Audio is bytes end to end. Nothing is ever .encode()d here.
 """
 
 import asyncio
+import platform
 import random
+import re
 import time
+from pathlib import Path
 
 from google import genai
 from google.genai import types
@@ -32,6 +35,24 @@ from .audio_utils import ensure_bytes
 from .errors import MayeraError, friendly_error
 
 _LONG_ABSENCE_SECONDS = 6 * 3600  # >6h away -> "welcome back" greeting
+
+# Reasoning stays private (v3.15, user's feature list): some models /
+# servers pass the model's inner reasoning through as ordinary
+# content inside <think>...</think>. Without a filter that text would
+# be treated as JARVIS's spoken answer - and it would also land in
+# the conversation checkpoint and pollute every later session's
+# context. Strip it wherever model text is consumed.
+_THINK_SPAN = re.compile(r"<think>.*?</think>", re.S | re.I)
+_THINK_OPEN = re.compile(r"<think>.*$", re.S | re.I)
+
+
+def strip_think(text):
+    """Remove <think>...</think> reasoning from model text."""
+    if not text:
+        return ""
+    cleaned = _THINK_SPAN.sub("", text)
+    cleaned = _THINK_OPEN.sub("", cleaned)  # unclosed tag: drop the tail
+    return cleaned.strip()
 
 
 class GeminiLiveSession:
@@ -123,7 +144,37 @@ class GeminiLiveSession:
                     f"baat kar rahe the: \"{cp['topic']}\". Mauka mile to "
                     "wahi se swabhavik roop se jodo."
                 )
+        text += "\n\n" + self._self_knowledge()
         return text
+
+    @staticmethod
+    def _self_knowledge():
+        """Runtime self-knowledge (v3.15): generated fresh from the
+        live system every session - rename JARVIS, add a plugin or
+        run a new version and this block already knows. Includes his
+        hard limits, so he answers 'tum ye kar sakte ho?' honestly."""
+        try:
+            version = (Path(__file__).resolve().parent.parent
+                       / "version.txt").read_text().strip()
+        except Exception:  # noqa: BLE001
+            version = "?"
+        try:
+            names = [d.name for d in tools_mod.function_declarations()]
+        except Exception:  # noqa: BLE001
+            names = []
+        return (
+            "APNE BAARE ME (runtime sach, is session ke liye): Tum "
+            f"JARVIS ho, version {version}, is samay "
+            f"{platform.system()} computer par chal rahe ho. Tumhare "
+            f"paas ye tools hain: {', '.join(names)}. Tum ye NAHI kar "
+            "sakte - inke tools hi nahi hain: file delete karna, "
+            "email/message bhejna, payment, shutdown/restart. Agar "
+            "Golu inme se kuch maange to jhoothi haan mat bolo - "
+            "pehle confirmation wala niyam yaad karo aur sach batao "
+            "ki ye abhi tumhare bas me nahi hai. Apni andar ki soch "
+            "(reasoning) kabhi bolo ya dikhao mat - sirf final jawab "
+            "do."
+        )
 
     # ------------------------------------------------------------------
     # lifecycle
@@ -657,8 +708,9 @@ class GeminiLiveSession:
             self.last_user_text = self._in_buf.strip()
             if self._on_user_text is not None:
                 await self._on_user_text(self.last_user_text)
-        if self._out_buf.strip():
-            self.last_ai_text = self._out_buf.strip()
+        ai_text = strip_think(self._out_buf)
+        if ai_text:
+            self.last_ai_text = ai_text
             if self._on_ai_text is not None:
                 await self._on_ai_text(self.last_ai_text)
         self._in_buf = ""
@@ -672,9 +724,26 @@ class GeminiLiveSession:
         {"get_current_time", "youtube_search", "remember_this",
          "forget_memory"})
 
+    # Heavy tools get an instant visible acknowledgment (v3.15) so a
+    # long task never starts in silence: the UI status flips to a
+    # "working" line at once, and the instruction tells JARVIS to
+    # speak a one-line filler before heavy tools too.
+    _ACK_LABELS = {
+        "look_at_screen": "Screen dekh raha hai...",
+        "youtube_search": "YouTube par dhoondh raha hai...",
+        "youtube_play": "Video laga raha hai...",
+        "open_app": "App khol raha hai...",
+        "take_screenshot": "Screenshot le raha hai...",
+    }
+
     def _spawn_tool_calls(self, function_calls):
         if self._tools is None:
             return
+        for _call in function_calls:
+            _label = self._ACK_LABELS.get(getattr(_call, "name", ""))
+            if _label:
+                asyncio.create_task(self._on_status("thinking", _label))
+                break
         task = asyncio.create_task(self._handle_tool_calls(function_calls))
         self._tool_tasks.add(task)
 

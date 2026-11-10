@@ -37,6 +37,7 @@ DEFAULT_SETTINGS = {
     "quiet_end": "07:00",
     "reply_speed": "fast",
     "web_search": "0",
+    "push_to_talk": "0",
 }
 
 
@@ -99,6 +100,28 @@ class MemoryStore:
                 (limit,),
             ).fetchall()
         return [dict(r) for r in rows]
+
+    def search_memories(self, query, limit=10):
+        """Keyword search across ALL stored memories (v3.15 recall):
+        the session prompt only carries the newest memories, so
+        older facts are found on demand through this search -
+        nothing stored is ever out of reach."""
+        words = [w for w in (query or "").lower().split() if len(w) > 2]
+        if not words:
+            return []
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT id, content, source, created_at FROM memories "
+                "ORDER BY id DESC"
+            ).fetchall()
+        scored = []
+        for r in rows:
+            text = r["content"].lower()
+            hits = sum(1 for w in words if w in text)
+            if hits:
+                scored.append((hits, dict(r)))
+        scored.sort(key=lambda item: -item[0])
+        return [item[1] for item in scored[:limit]]
 
     def count_memories(self):
         with self._lock:

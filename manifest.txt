@@ -18,6 +18,9 @@ mayera/key_prompt_gui.py
 mayera/key_vault.py
 mayera/memory_store.py
 mayera/pc_control.py
+mayera/plugins_loader.py
+plugins/README.txt
+plugins/dice_plugin.py
 mayera/proactive.py
 mayera/screen_vision.py
 mayera/tools.py

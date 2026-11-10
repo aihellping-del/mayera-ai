@@ -285,10 +285,48 @@ async def watchdog():
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
+def _install_global_ptt(loop):
+    """Windows-global Push-to-Talk (v3.15): while the Push-to-Talk
+    setting is ON, holding Ctrl+Space ANYWHERE in Windows tells the
+    browser page 'mic open', releasing it closes the mic - the
+    `keyboard` package hears the keys, the page does the gating.
+    Soft-fails like the stop hotkey when unavailable."""
+    try:
+        import keyboard
+    except Exception:  # noqa: BLE001 - optional dependency
+        return
+    state = {"held": False}
+
+    def _send(active):
+        if store.get_setting("push_to_talk", "0") != "1":
+            return
+        asyncio.run_coroutine_threadsafe(
+            manager.send_json({"type": "ptt", "active": active}), loop)
+
+    def _press(_event):
+        if not state["held"] and keyboard.is_pressed("ctrl"):
+            state["held"] = True
+            _send(True)
+
+    def _release(_event):
+        if state["held"]:
+            state["held"] = False
+            _send(False)
+
+    try:
+        keyboard.on_press_key("space", _press)
+        keyboard.on_release_key("space", _release)
+        print("  Push-to-Talk taiyaar hai (Settings me ON karne par "
+              "Ctrl+Space se chalega).")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("JARVIS server ready at http://%s:%s", config.HOST, config.PORT)
     task = asyncio.create_task(watchdog())
+    _install_global_ptt(asyncio.get_running_loop())
     yield
     task.cancel()
     global live_session
@@ -391,7 +429,8 @@ async def api_settings_get():
 @app.post("/api/settings")
 async def api_settings_post(payload: dict):
     allowed = {"memory_enabled", "proactive_enabled", "inactivity_seconds",
-               "quiet_start", "quiet_end", "reply_speed", "web_search"}
+               "quiet_start", "quiet_end", "reply_speed", "web_search",
+               "push_to_talk"}
     for key, value in (payload or {}).items():
         if key in allowed:
             store.set_setting(key, value)
