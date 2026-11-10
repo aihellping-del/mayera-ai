@@ -82,7 +82,7 @@ _pc = PcController()
 # a trash_file call can only proceed on the user's own tap.
 from actions.browser_agent import BrowserAgent  # noqa: E402
 from actions.file_ops import FileOps  # noqa: E402
-from actions.whatsapp import WhatsAppMessenger  # noqa: E402
+from actions.whatsapp import WA_PART, WA_URL, WhatsAppMessenger  # noqa: E402
 from core.confirm import ConfirmGate  # noqa: E402
 
 confirm_gate = ConfirmGate()
@@ -94,7 +94,8 @@ async def _confirm_notify(cid, question):
 
 
 confirm_gate.notify = _confirm_notify
-_browser_agent = BrowserAgent()  # v3.20: JARVIS's own personal browser
+_browser_agent = BrowserAgent(
+    warm_tabs=[(WA_URL, WA_PART)])  # v3.26: WhatsApp pre-loads in background
 tool_executor = ToolExecutor(
     store, pc=_pc, yt=YoutubePlayer(),
     vision=ScreenVision(pc=_pc),  # v3.12: JARVIS can actually SEE the screen

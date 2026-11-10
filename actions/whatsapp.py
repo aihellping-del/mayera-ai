@@ -156,7 +156,7 @@ class WhatsAppMessenger:
         self._page = await self._browser.open_tab(WA_URL, WA_PART)
         return self._page
 
-    async def _wait_state(self, page, seconds=10.0):
+    async def _wait_state(self, page, seconds=12.0):
         import time
         deadline = time.monotonic() + seconds
         state = "loading"
@@ -168,8 +168,24 @@ class WhatsAppMessenger:
                 state = "loading"
             if state in ("logged_in", "qr"):
                 return state
-            await asyncio.sleep(0.7)
+            await asyncio.sleep(0.45)
         return state
+
+    async def _poll_eval(self, page, expr, want, seconds=2.5):
+        """Re-run an eval until want(result) is truthy - returns the
+        last result either way (v3.26: polling replaces fixed
+        sleeps, so a fast page is not held up by a slow-page wait)."""
+        import time
+        deadline = time.monotonic() + seconds
+        out = None
+        while True:
+            try:
+                out = await page.eval(expr)
+            except Exception:  # noqa: BLE001
+                out = None
+            if want(out) or time.monotonic() >= deadline:
+                return out
+            await asyncio.sleep(0.3)
 
     async def send_message(self, contact, message, confirm=None):
         contact = " ".join((contact or "").split())
@@ -197,15 +213,16 @@ class WhatsAppMessenger:
             return {"status": "error",
                     "message": "WhatsApp ka search box nahi mila"}
         await page.call("Input.insertText", text=contact)
-        await asyncio.sleep(1.4)
-        found = await page.eval(_FIND_CHAT_JS % json.dumps(
-            contact.lower())) or {}
+        found = await self._poll_eval(
+            page, _FIND_CHAT_JS % json.dumps(contact.lower()),
+            lambda o: bool(o and o.get("found"))) or {}
         if not found.get("found"):
             return {"status": "error",
                     "message": f"'{contact}' naam ki chat WhatsApp "
                                "par nahi mili - naam check karo"}
-        await asyncio.sleep(1.0)
-        opened = await page.eval(_CHAT_OPEN_JS) or {}
+        opened = await self._poll_eval(
+            page, _CHAT_OPEN_JS,
+            lambda o: bool(o and o.get("open"))) or {}
         if not opened.get("open"):
             return {"status": "error",
                     "message": "chat khuli par message likhne ki "
@@ -244,9 +261,9 @@ class WhatsAppMessenger:
                             type="keyUp", key="Enter",
                             windowsVirtualKeyCode=13)
             sent = {"sent": True, "how": "enter"}
-        await asyncio.sleep(1.0)
-        verified = bool(await page.eval(
-            _VERIFY_JS % json.dumps(message[:30])) or False)
+        verified = bool(await self._poll_eval(
+            page, _VERIFY_JS % json.dumps(message[:30]),
+            lambda o: bool(o), seconds=2.5) or False)
         return {"status": "done", "contact": found.get("name") or contact,
                 "sent_via": sent.get("how"), "verified": verified,
                 "note": "verified True ho tabhi 'message gaya' "

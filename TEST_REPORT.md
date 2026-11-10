@@ -1063,3 +1063,25 @@ Tests: 10/10 new (~/workspace/test_whatsapp.py - QR state,
 no-approver cancel, gate deny/allow with exact-text question,
 unknown contact, executor routing, 44 declarations) + all
 regressions (decl counts 43 -> 44 in six suites) + smoke.
+
+--- v3.26.0 addendum (2026-11-10): WHATSAPP SPEED (PRE-LOADED) ---
+User, after the first live try: 'Bahut time leta hai load hone
+me, utna me to mai hi WhatsApp khol ke message kar du' - he is
+right: a helper slower than doing it by hand is useless. The
+load cost was WhatsApp Web's own heavy first boot in a fresh
+tab, paid on EVERY ask, plus ~4 s of fixed sleeps in the flow.
+Fixes: (1) BrowserAgent gains warm_tabs - WhatsApp Web now
+pre-opens in the background the moment JARVIS's browser first
+starts (main.py passes WA_URL/WA_PART), so it sits loaded and
+logged-in; saying 'message bhejo' no longer pays the boot.
+(2) The flow's fixed sleeps became polls (chat row, message
+box, delivery bubble - each returns the moment it appears,
+2.5 s caps). Expected real-world effect: first-ever use still
+boots once (and needs his one-time QR); after that, a send is
+search+type+his card tap+send.
+Also: AGENTS.md amended to record the owner's v3.25 WhatsApp
+exception next to the v3.17 trash exception (house rule kept
+truthful).
+Tests: 11/11 test_whatsapp (new: chat row appearing only on the
+3rd poll still sends) + browser/screen/noise/mouse/focus
+regressions + server smoke.

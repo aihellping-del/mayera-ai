@@ -286,7 +286,7 @@ async def _create_tab(port, url):
 
 class BrowserAgent:
     def __init__(self, profile_dir=None, popen=None, page_factory=None,
-                 browser_finder=None, port=DEBUG_PORT):
+                 browser_finder=None, port=DEBUG_PORT, warm_tabs=None):
         self._profile = (Path(profile_dir) if profile_dir
                          else Path.home() / ".jarvis_browser")
         self._popen = popen or subprocess.Popen
@@ -297,6 +297,12 @@ class BrowserAgent:
         self._proc = None
         self._last_results = []
         self._tabs = {}  # url_part -> _CdpPage (v3.25, WhatsApp tab)
+        # v3.26: tabs pre-opened in the background when the browser
+        # first starts, so heavy pages (WhatsApp Web) are already
+        # loaded when the user asks - his complaint: by the time it
+        # loaded, he could have messaged by hand.
+        self._warm_tabs = warm_tabs or []
+        self._warm_started = False
 
     # ------------------------------------------------------------------
     async def _ensure_page(self):
@@ -327,7 +333,29 @@ class BrowserAgent:
         if not ws_url:
             raise RuntimeError("browser khula par control nahi mila")
         self._page = await _CdpPage(ws_url).connect()
+        self._kick_warm_tabs()
         return self._page
+
+    def _kick_warm_tabs(self):
+        """Pre-open the warm tabs (v3.26) once, in the background -
+        fire-and-forget; a failure here must never break browsing."""
+        if self._warm_started or not self._warm_tabs:
+            return
+        if self._page_factory is not None:
+            return  # tests drive their own pages
+        self._warm_started = True
+
+        async def _warm():
+            for url, part in self._warm_tabs:
+                try:
+                    await self.open_tab(url, part)
+                except Exception:  # noqa: BLE001 - best effort only
+                    pass
+
+        try:
+            asyncio.get_running_loop().create_task(_warm())
+        except RuntimeError:
+            pass
 
     async def open_tab(self, url, url_part):
         """A second tab in JARVIS's browser (v3.25 - WhatsApp Web
