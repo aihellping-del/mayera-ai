@@ -52,6 +52,7 @@ class GeminiLiveSession:
         self._session = None
         self._ctx = None
         self._recv_task = None
+        self._reconnect_task = None
         self._send_lock = asyncio.Lock()
         self._stopped = True
         self._resumption_handle = None
@@ -127,6 +128,9 @@ class GeminiLiveSession:
     async def stop(self):
         self._stopped = True
         self._save_checkpoint()
+        if self._reconnect_task is not None:
+            self._reconnect_task.cancel()
+            self._reconnect_task = None
         if self._recv_task is not None:
             self._recv_task.cancel()
             self._recv_task = None
@@ -356,7 +360,38 @@ class GeminiLiveSession:
         await self._on_status("connected", "JARVIS connected hai.")
         self._recv_task = asyncio.create_task(self._receive_loop())
 
+    def _schedule_reconnect(self):
+        """The ONE owner of reconnection (v3.6 fix).
+
+        A drop can announce itself three ways at nearly the same
+        moment - a go_away warning, a receive error, and the receive
+        stream simply ending. Before this fix each one spawned its
+        own reconnect, and the parallel reconnects kept closing each
+        other's brand-new sessions: the UI said "reconnecting"
+        forever and JARVIS never actually came back.
+        """
+        if self._stopped:
+            return
+        task = self._reconnect_task
+        if task is not None and not task.done():
+            return
+        self._reconnect_task = asyncio.create_task(self._reconnect())
+
     async def _reconnect(self):
+        # Take over cleanly first: stop the old receive loop before
+        # touching the session, so two loops never fight over one
+        # connection.
+        recv = self._recv_task
+        if recv is not None and not recv.done():
+            recv.cancel()
+            try:
+                await recv
+            except BaseException:  # noqa: BLE001 - old loop is done either way
+                pass
+        if self._recv_task is recv:
+            self._recv_task = None
+        if self._stopped:
+            return
         delay = config.RECONNECT_BASE_DELAY
         for attempt in range(1, config.MAX_RECONNECT_ATTEMPTS + 1):
             if self._stopped:
@@ -373,6 +408,9 @@ class GeminiLiveSession:
                 await self._on_status("error", err.message)
                 return
             if ok and self._session is not None:
+                if self._stopped:
+                    await self._close_session()
+                    return
                 await self._on_status("connected", "JARVIS phir se connected hai.")
                 self._recv_task = asyncio.create_task(self._receive_loop())
                 return
@@ -409,22 +447,32 @@ class GeminiLiveSession:
     # receiving: audio + transcription + tool calls
     # ------------------------------------------------------------------
     async def _receive_loop(self):
+        # Bound to ONE session instance: if the session is replaced
+        # (reconnect) or the app stops, this loop simply exits.
+        session = self._session
         try:
-            while not self._stopped and self._session is not None:
-                async for response in self._session.receive():
-                    if self._stopped:
+            while not self._stopped and self._session is session:
+                async for response in session.receive():
+                    if self._stopped or self._session is not session:
                         return
                     await self._handle_response(response)
+                # receive() ended on its own: the server closed the
+                # session (Gemini Live sessions have a time limit).
+                # Before v3.6 this loop called receive() on the dead
+                # session forever - JARVIS looked connected, was not,
+                # and no reconnect ever started.
+                break
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001
-            if self._stopped:
+            if self._stopped or self._session is not session:
                 return
             code, message = friendly_error(exc)
             if code == "auth_error":
                 await self._on_status("error", message)
                 return
-            asyncio.create_task(self._reconnect())
+        if not self._stopped and self._session is session:
+            self._schedule_reconnect()
 
     async def _handle_response(self, response):
         # --- tool calls (MAYERA wants to act) ---
@@ -465,7 +513,7 @@ class GeminiLiveSession:
                 self._resumption_handle = handle
 
         if getattr(response, "go_away", None) is not None and not self._stopped:
-            asyncio.create_task(self._reconnect())
+            self._schedule_reconnect()
 
     async def _flush_turn(self):
         if self._in_buf.strip():

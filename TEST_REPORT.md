@@ -372,3 +372,22 @@ YouTube fetch timeout 10s->5s; slow tools now print "[tool] <name>:
 X.Xs" in the terminal so the next screenshot shows WHICH step was
 slow. Checks: logger name, turbo VAD values, cache single-fetch,
 served page contains zero "MAYERA", /health - all pass.
+
+--- v3.6.0 addendum (2026-11-10): RECONNECT ACTUALLY RECONNECTS ---
+User report: after a while JARVIS showed "reconnecting" but never
+connected again. Root causes found in code review: (1) a session
+drop announced itself up to three ways at once (go_away warning,
+receive error, stream end) and EACH spawned its own reconnect task;
+the parallel reconnects kept closing each other's brand-new
+sessions, so nothing ever survived. (2) When the server closed the
+session cleanly (Gemini Live sessions have a time limit), the
+receive loop just called receive() on the dead session forever -
+no error, no reconnect, JARVIS looked connected but was dead.
+Fix: a single reconnect owner (_schedule_reconnect deduplicates
+triggers), the receive loop is bound to its session instance and
+treats stream-end as a disconnect, reconnect first cancels the old
+receive loop, and stop() also cancels a pending reconnect.
+Session-resumption handle use is unchanged, so the conversation
+context carries over. 12/12 fake-session tests pass: clean close,
+receive error, go_away, double trigger, stop-during-backoff, and
+no-reconnect-after-stop. (Test: ~/workspace/test_reconnect.py.)
