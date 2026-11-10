@@ -122,12 +122,18 @@ audio_stats = {"mic_chunks_received": 0, "interruptions": 0}
 client_playback: dict = {}
 
 
-def _record_latency(seconds: float):
+def _record_latency(seconds: float, end_wait=None):
     latency_samples.append(seconds)
     if len(latency_samples) > 50:
         del latency_samples[:-50]
     avg = sum(latency_samples) / len(latency_samples)
-    print(f"  [latency] Jawab ka pehla sound: {seconds:.2f}s "
+    # v3.19: the second number splits the wait - time from when his
+    # microphone went fully quiet (last chunk of any kind) to the
+    # first reply sound. Felt minus this = his own trailing silence
+    # and trailing quiet chunks, which no model can answer inside.
+    seg = (f", mic band -> jawab: {end_wait:.2f}s"
+           if end_wait is not None else "")
+    print(f"  [latency] Jawab ka pehla sound: {seconds:.2f}s{seg} "
           f"(average {avg:.2f}s, {len(latency_samples)} replies)",
           flush=True)
 
@@ -148,7 +154,8 @@ async def send_ui_status(state: str, message: str = ""):
 
 # voice-activity state (drives 'thinking' face + proactive timing)
 voice_state = {"last_voice": 0.0, "last_ai": 0.0, "talking": False,
-               "thinking_sent": False, "awaiting_reply": False}
+               "thinking_sent": False, "awaiting_reply": False,
+               "last_chunk": 0.0}
 
 # ---------------------------------------------------------------------------
 # Mood memory (v3.2): MAYERA "samajhti" hai - she notices how Golu
@@ -214,7 +221,9 @@ async def on_ai_audio(pcm_bytes: bytes):
         # First reply audio after Golu finished speaking: this gap is
         # the latency he actually feels. Measure it, once per turn.
         voice_state["awaiting_reply"] = False
-        _record_latency(now - voice_state["last_voice"])
+        end_wait = (now - voice_state["last_chunk"]
+                    if voice_state["last_chunk"] else None)
+        _record_latency(now - voice_state["last_voice"], end_wait)
     voice_state["last_ai"] = now
     voice_state["thinking_sent"] = False
     watcher.mark_activity()
@@ -541,6 +550,7 @@ async def websocket_endpoint(ws: WebSocket):
             if message.get("bytes") is not None:
                 chunk = message["bytes"]
                 audio_stats["mic_chunks_received"] += 1
+                voice_state["last_chunk"] = time.monotonic()
                 if rms_level(chunk) > 0.03:
                     now = time.monotonic()
                     # New speech cancels any pending reply measurement:

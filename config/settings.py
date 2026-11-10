@@ -16,17 +16,20 @@ import os
 # You can force one model with the MAYERA_MODEL environment variable.
 # ---------------------------------------------------------------------------
 MODEL_CANDIDATES = [
-    # Mark LVI's measured lead rung (v3.17 port): in his project this
-    # Live model connected and answered fastest. If it is not
-    # available for this key/region it fails fast and the ladder
-    # moves on; once any model succeeds it is remembered and tried
-    # first (last_model), so a bad rung costs one attempt, once.
-    "gemini-3.1-flash-live-preview",
+    # Speed-first (v3.19): the user's own measured replies on this
+    # rung were his fastest (1.4-4.5 s plain replies, 2026-11-10).
+    # The 3.1 preview (Mark LVI's lead) stays as the second rung.
     "gemini-2.5-flash-native-audio-preview-12-2025",
+    "gemini-3.1-flash-live-preview",
     "gemini-2.5-flash-native-audio-preview-09-2025",
     "gemini-live-2.5-flash-preview",
     "gemini-2.0-flash-live-001",
 ]
+
+# The rung that always jumps the queue at connect time (v3.19),
+# ahead of even the remembered last_model: reply speed is the
+# user's standing complaint, and this is his measured-fastest.
+SPEED_FIRST_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
 
 # Female-style prebuilt voice. Other options: "Kore", "Leda", "Zephyr".
 VOICE_NAME = os.environ.get("MAYERA_VOICE", "Charon")

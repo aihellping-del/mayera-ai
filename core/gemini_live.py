@@ -290,7 +290,10 @@ class GeminiLiveSession:
             speed = self._store.get_setting("reply_speed", "fast")
         if speed == "patient":
             return (types.EndSensitivity.END_SENSITIVITY_LOW, 300, 900)
-        return (types.EndSensitivity.END_SENSITIVITY_HIGH, 120, 250)
+        # v3.19 speed round 4: tighter endpointing - he only has to
+        # pause ~150 ms before JARVIS starts answering (was 250 ms),
+        # and less pre-speech padding is replayed (60 ms, was 120).
+        return (types.EndSensitivity.END_SENSITIVITY_HIGH, 60, 150)
 
     def _web_search_enabled(self):
         return (self._store is not None
@@ -391,6 +394,12 @@ class GeminiLiveSession:
                 last = ""
             if last and last in models:
                 models = [last] + [m for m in models if m != last]
+        # v3.19: the measured-fastest rung always leads, ahead of
+        # last_model too - a slower preview model that happened to
+        # connect last time must not become the default reply path.
+        first = getattr(config, "SPEED_FIRST_MODEL", None)
+        if first and first in models:
+            models = [first] + [m for m in models if m != first]
         return models
 
     async def _try_models(self, attempt_timeout=None):

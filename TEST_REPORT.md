@@ -882,3 +882,30 @@ Tests: 5/5 new (~/workspace/test_app_window.py - app mode args,
 tab fallback, launch-failure fallback, env override) + server
 smoke + regressions 13/13 + 31/31 + 36/36 + 12/12. The actual
 window appearing is only provable on his PC (standing limit).
+
+--- v3.19.0 addendum (2026-11-10): SPEED ROUND 4 (user: 'mere
+swalo ka jawab bahut late me deta hai, usko fix karo') ---
+Whole reply path re-audited. Remaining controllable delays found:
+(1) server VAD endpointing waited for 250 ms of silence before the
+model even started its reply; (2) since v3.17 the ladder led with
+the gemini-3.1-flash-live-preview PREVIEW model, and last_model
+memory kept it first forever - while his own measured fastest
+plain replies (1.4-4.5 s, 2026-11-10) were on the 2.5 native-audio
+12-2025 rung; (3) the browser waited a 120 ms cushion before the
+first sound of every reply; (4) the [latency] line could not split
+'his trailing silence' from 'model+network wait'.
+Fixes: fast VAD silence 250 -> 150 ms, prefix 120 -> 60 ms
+(patient profile untouched); config.SPEED_FIRST_MODEL = the
+12-2025 rung, and _ordered_candidates puts it FIRST always, ahead
+of last_model (ladder order in config also swapped, 3.1 second);
+playback cushion start 120 -> 70 ms, floor 60 -> 40 ms (starvation
+adaptivity unchanged); [latency] lines now also print
+'mic band -> jawab: X.XXs' (last mic chunk of any kind -> first
+reply sound) so his next screenshot separates the segments.
+Tests: 11/11 new (~/workspace/test_speed_round4.py) + Node
+playback 11/11 (cushion expectations updated) + port pack 36/36
+(ladder expectations updated) + regressions 12/14/15/8/49/42/13/31/
+5/8 all passing + server smoke. Honest limit, as always: the real
+before/after on HIS replies needs his PC - the restart + 2-minute
+talk + [latency] screenshot is the proof, and the new segment
+number will show exactly where any remaining wait lives.

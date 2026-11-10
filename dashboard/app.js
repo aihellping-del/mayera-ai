@@ -59,8 +59,8 @@ const scheduled = new Set();      // live BufferSources (for interruption flush)
 // and later chunks chain exactly on playHead. The cushion adapts:
 // a starvation (chunk arriving after its slot passed) grows it,
 // clean turns shrink it towards the floor.
-let adaptBufferMs = 120;          // current jitter cushion
-const BUFFER_MIN_MS = 60, BUFFER_MAX_MS = 300;
+let adaptBufferMs = 70;           // current jitter cushion (v3.19: was 120 - first sound sooner)
+const BUFFER_MIN_MS = 40, BUFFER_MAX_MS = 300;
 let turnHadStarvation = false;
 const pbStats = {
   received: 0,        // AI audio chunks arrived from the server
@@ -337,7 +337,7 @@ function tick() {
   // If scheduled audio has run out, MAYERA finished speaking.
   if (speaking && playCtx && playCtx.currentTime > playHead + 0.05 && scheduled.size === 0) {
     // A turn that drained with NO starvation earns a smaller
-    // cushion next time (faster first audio); floor 60 ms (v3.14).
+    // cushion next time (faster first audio); floor 40 ms (v3.19).
     if (!turnHadStarvation && adaptBufferMs > BUFFER_MIN_MS) {
       adaptBufferMs = Math.max(BUFFER_MIN_MS, Math.round(adaptBufferMs * 0.9));
       turnHadStarvation = true; // shrink at most once per drained turn
