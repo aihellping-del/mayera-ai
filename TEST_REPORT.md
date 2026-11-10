@@ -1336,3 +1336,75 @@ Tests: 8/8 new (~/workspace/test_automation_integration.py:
 field fill+verify, unknown-field honesty, executor routing,
 48 declarations, log content/privacy/trim, PyAutoGUI shipped)
 + every regression suite + Node + smoke.
+
+--- v3.35.0 addendum (2026-11-11): JARVIS GL TRADER (user brief + layout update) ---
+New top-level project folder JARVIS_GL_TRADER/ inside the repo,
+built exactly to the user's specified structure: main.py =
+TraderController (single entry, used by dashboard AND voice
+plugin), config.py, data/mt5_feed.py (MT5 read-only closed
+candles + deterministic DEMO synthetic fallback, M1 + M5),
+strategies/ (indicators EMA9/21/50/200 RSI14 MACD Bollinger ATR -
+pure Python, no pandas/numpy; crt.py; candle_psychology.py with
+double-candle patterns), scanner/best_pair.py, engine/
+(signal_engine, backtesting, paper, history -> logs/signals.json
+runtime file, deliberately NOT in manifest so updates never wipe
+history; code creates it if missing), dashboard/ (FastAPI app +
+websocket manager + dark-glass template, Lightweight Charts CDN
+with graceful fallback if the CDN is unreachable), jarvis/
+integration.py, plugins/gl_trader_plugin.py (ONE tool "gl_trader",
+actions start/stop/status/best/explain/history/backtest),
+START_GL_TRADER.bat, port 8771 (JARVIS voice app stays on 8765).
+Decisions are CALL / PUT / NO TRADE. M5 CONFIRMATION GATE: M1
+signal must agree with M5 EMA9/21 trend, else power is halved and
+the result is NO TRADE unless still Strong+ (reason always
+recorded). Non-repainting: signal_at uses only candles[:idx+1]
+and M5 blocks closed by then; live + backtest share it.
+SAFETY: no trade-execution code anywhere (grep-verified); MT5 is
+a read-only data source; paper trading only; no accuracy is
+guaranteed anywhere in UI, README or plugin text.
+COMPATIBILITY NOTE: no external repo was merged. Only the
+existing JARVIS repo's own components were reused after a
+compatibility check (FastAPI/uvicorn stack already in
+requirements.txt, plugin loader TOOL+handle format) - per the
+brief, nothing external was named or imported.
+TESTS (~/workspace/test_gl_trader.py): 38/38 pass - indicators
+(EMA/RSI~100 on monotonic/MACD/Bollinger-flat/ATR), engulfing +
+CRT both directions, M5 aggregation drops partial blocks,
+non-repaint under future-candle mutation, M5 gate hard proof
+(EURUSD idx 719 CALL power 6 -> opposing M5 makes it NO TRADE
+power 3, "M5 confirmation: FAILED"), backtest no-look-ahead
+(truncated run's trades are an exact prefix of the full run),
+best_pair None/strongest, paper win +8.0 / loss -10.0, breakeven
+0.80 -> 55.56%, TraderController start/stop/scan (9 pairs),
+FastAPI TestClient (status DEMO-SYNTHETIC, scan, control,
+candles, dashboard HTML), plugin via the real loader (gl_trader
++ roll_dice both load, handler answers). Regressions:
+test_feature_pack 31/31, test_port_pack 36/36, py_compile clean
+for the whole repo.
+BACKTEST HONESTY (synthetic DEMO data, 1500 candles/pair, payout
+0.80, min power 6 + M5 gate): the system is VERY selective -
+EURUSD distribution over 1,289 bars: power 1-4 (NO TRADE) on
+1,284 bars, only 5 bars reached power >= 5. Trades per pair:
+EURUSD 2 (WR 50.0%, IN 1 trade 0%, OUT 1 trade 100%), GBPUSD 0,
+USDJPY 3 (66.7%), AUDUSD 0, USDCAD 0, USDCHF 1 (0%), NZDUSD 0,
+EURJPY 1 (100%), GBPJPY 2 (100%) - total 9 trades. Samples this
+small prove NOTHING about real accuracy; the engine was NOT
+tuned to inflate them. On real MT5 data the same selectivity
+applies: expect long NO TRADE stretches - that is the filter
+working, not a bug.
+DASHBOARD PROOF: real server run + Playwright screenshot
+(~/workspace/gl-trader-dashboard.png): DEMO-SYNTHETIC badge,
+BEST PAIR neutral NO TRADE state, scanner table with all 9
+pairs live, paper balance 1000. The chart CDN (unpkg) is
+unreachable from this dev VM, which exposed and fixed a real
+bug: a failed chart script used to kill all dashboard JS; the
+page now degrades gracefully (on the user's laptop with normal
+internet the chart loads normally).
+MT5 HONESTY: MT5 itself cannot run on this Linux VM - the live
+path is code-reviewed (lazy import inside connect(), forming
+candle dropped) and the DEMO fallback is what was exercised.
+First live check on his PC: open MT5, log in to a DEMO account,
+run START_GL_TRADER.bat, badge must read MT5-LIVE.
+RAM note: pure Python, candle cache capped at 500/pair - built
+for his 8GB RAM laptop (brief said 8GB; earlier notes said 12GB,
+the tighter figure was used).

@@ -1,0 +1,12 @@
+# JARVIS GL TRADER - project dependencies
+# Core JARVIS already installs fastapi + uvicorn (see repo-root
+# requirements.txt). Listed here so GL Trader can also run standalone.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+websockets>=12.0
+
+# Windows-only, OPTIONAL: real MT5 market data (read-only).
+# If absent, GL Trader automatically falls back to DEMO synthetic data.
+MetaTrader5>=5.0.44; sys_platform == "win32"
+
+# Deliberately NO pandas / numpy - pure Python, lightweight (8GB RAM OK).

@@ -19,3 +19,7 @@ pygetwindow
 mss
 Pillow
 keyboard
+
+# GL Trader (v3.35): Windows-only OPTIONAL MT5 data feed (read-only).
+# Absent par GL Trader DEMO synthetic data par chalega - JARVIS nahi rukega.
+MetaTrader5>=5.0.44; sys_platform == "win32"

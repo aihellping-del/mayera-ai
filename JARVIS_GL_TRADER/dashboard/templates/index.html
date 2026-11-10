@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JARVIS GL TRADER — Research Only</title>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+body{background:#0b0f17;color:#e6edf3;font-family:system-ui;margin:0;padding:16px}
+.glass{background:rgba(255,255,255,.06);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:14px;margin:10px 0}
+.badge{padding:3px 10px;border-radius:99px;font-weight:700}
+.demo{background:#7a1f1f}.live{background:#14532d}
+button{background:#1f6feb;color:#fff;border:0;border-radius:8px;padding:9px 18px;cursor:pointer;font-size:15px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.call{border:2px solid #22c55e;box-shadow:0 0 24px rgba(34,197,94,.35)}
+.put{border:2px solid #ef4444;box-shadow:0 0 24px rgba(239,68,68,.35)}
+.neutral{border:2px solid #64748b;box-shadow:none}
+.big{font-size:44px;font-weight:800}
+table{width:100%;border-collapse:collapse}td,th{padding:6px;border-bottom:1px solid rgba(255,255,255,.08);text-align:left}
+tr{cursor:pointer} .disc{color:#fbbf24;font-size:13px}
+</style></head><body>
+<h1>JARVIS GL TRADER — Research Only</h1>
+<div class="glass"><span id="feedBadge" class="badge demo">…</span>
+ <span class="disc">Signals are research, NOT guaranteed. Binary trading is high risk — paper mode only.</span>
+ <button id="startBtn">▶ Start</button> <button id="stopBtn">■ Stop</button>
+ <label><input type="checkbox" id="mute"> Mute sound</label></div>
+<div class="glass"><h2>BEST PAIR</h2><div id="bestPair" class="big">—</div><div id="bestReason"></div></div>
+<div class="grid">
+ <div class="glass call" id="callPanel"><h2>▲ CALL</h2><div id="callBody">Waiting…</div></div>
+ <div class="glass put" id="putPanel"><h2>▼ PUT</h2><div id="putBody">Waiting…</div></div>
+</div>
+<div class="glass"><h3 id="chartTitle">Chart</h3><div id="chart" style="height:320px"></div></div>
+<div class="grid"><div class="glass"><h3>Paper Stats (PAPER)</h3><div id="stats"></div></div>
+<div class="glass"><h3>Scanner — 9 Pairs</h3><table id="scanTable"><thead><tr><th>Pair</th><th>Price</th><th>Dir</th><th>Power</th><th>Class</th><th>ATR</th></tr></thead><tbody></tbody></table></div></div>
+<div class="glass"><h3>Signal History</h3><table id="histTable"><thead><tr><th>Time</th><th>Pair</th><th>Dir</th><th>Power</th></tr></thead><tbody></tbody></table></div>
+<script>
+let chart, series, selected=null, audioCtx=null;
+function beep(){ if(document.getElementById('mute').checked) return;
+ try{ audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+  const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+  o.frequency.value=880;o.connect(g);g.connect(audioCtx.destination);
+  g.gain.value=0.12;o.start();o.stop(audioCtx.currentTime+0.25);}catch(e){} }
+function initChart(){ try{ chart=LightweightCharts.createChart(document.getElementById('chart'),{layout:{background:{color:'#111827'},textColor:'#e6edf3'},width:document.getElementById('chart').clientWidth,height:320});
+ series=chart.addCandlestickSeries(); }catch(e){ document.getElementById('chart').textContent='Chart library load nahi hui (internet/CDN) - baaki dashboard chal raha hai.'; } }
+async function loadChart(sym){ selected=sym; document.getElementById('chartTitle').textContent='Chart — '+sym;
+ if(!series) return;
+ const r=await (await fetch('/api/candles/'+sym+'?count=200')).json();
+ series.setData(r.candles.map(c=>({time:c.time,open:c.open,high:c.high,low:c.low,close:c.close}))); }
+function renderSignal(sig){
+ const cb=document.getElementById('callBody'),pb=document.getElementById('putBody');
+ const cp=document.getElementById('callPanel'),pp=document.getElementById('putPanel');
+ cp.classList.remove('neutral');pp.classList.remove('neutral');
+ const html=s=>`<div class="big">${s.symbol} — Power ${s.power_score}/10</div><div>Strength ${s.strength_pct}% · ${s.classification}</div><ul>${(s.reasons||[]).map(r=>`<li>${r}</li>`).join('')}</ul>`;
+ if(!sig||sig.direction==='NO TRADE'){ cb.textContent='NO TRADE'; pb.textContent='NO TRADE';
+   cp.classList.add('neutral');pp.classList.add('neutral'); return; }
+ if(sig.direction==='CALL'){ cb.innerHTML=html(sig); pb.textContent='—'; }
+ else { pb.innerHTML=html(sig); cb.textContent='—'; } }
+function render(data){
+ const st=document.getElementById('stats'),ps=data.paper_stats||{};
+ st.innerHTML=`Balance: <b>${ps.balance}</b> PAPER · Trades ${ps.trades||0} · W ${ps.wins||0} / L ${ps.losses||0} · Win% ${ps.win_rate?Math.round(ps.win_rate*100):0}% · PnL ${ps.net_pnl}`;
+ const tb=document.querySelector('#scanTable tbody'); tb.innerHTML='';
+ (data.scan||[]).forEach(r=>{ const s=r.signal||{}; const tr=document.createElement('tr');
+  tr.innerHTML=`<td>${r.symbol}</td><td>${r.price??''}</td><td>${s.direction||''}</td><td>${s.power_score??0}</td><td>${s.classification||''}</td><td>${s.volatility_ok?'OK':'FILTERED'}</td>`;
+  tr.onclick=()=>loadChart(r.symbol); tb.appendChild(tr); });
+ const best=data.best; document.getElementById('bestPair').textContent=best?best.symbol:'NO TRADE';
+ document.getElementById('bestReason').textContent=data.best_reason||'';
+ renderSignal(best?best.signal:null);
+ fetch('/api/history').then(r=>r.json()).then(h=>{ const hb=document.querySelector('#histTable tbody'); hb.innerHTML='';
+  (h.history||[]).forEach(s=>{ const tr=document.createElement('tr');
+   tr.innerHTML=`<td>${new Date(s.time*1000).toLocaleTimeString()}</td><td>${s.symbol}</td><td>${s.direction}</td><td>${s.power_score}</td>`; hb.appendChild(tr); }); });
+ if(best&&!selected) loadChart(best.symbol); }
+async function refresh(){ const s=await (await fetch('/api/status')).json();
+ const b=document.getElementById('feedBadge'); b.textContent=s.feed_source;
+ b.className='badge '+(s.is_live?'live':'demo');
+ render(await (await fetch('/api/scan')).json()); }
+document.getElementById('startBtn').onclick=async()=>{ beep(); await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'start'})}); refresh(); };
+document.getElementById('stopBtn').onclick=async()=>{ await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stop'})}); };
+initChart(); refresh();
+const ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
+ws.onmessage=e=>{ const m=JSON.parse(e.data); if(m.type==='NEW_SIGNAL'){ beep(); }
+ if(m.type==='scan'||m.scan) render(m); };
+</script></body></html>

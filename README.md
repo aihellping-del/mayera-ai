@@ -182,3 +182,16 @@ gate, file operations with recoverable trash, self-describing
 plugins, and the measured Gemini Live model ladder. Adaptations are
 reimplemented for this codebase; the Gemini Live engine, DPAPI key
 vault, memory store and auto-update are JARVIS's own.
+
+---
+
+## JARVIS GL TRADER (v3.35) — Binary Signal Research
+
+A research-only binary signal system in `JARVIS_GL_TRADER/`:
+CRT + candle psychology + EMA/RSI/MACD/Bollinger/ATR scoring over
+9 pairs, M5 confirmation gate, BEST PAIR scanner, non-repainting
+signals (CALL / PUT / NO TRADE), payout-aware backtesting and a
+paper-trading dashboard at http://127.0.0.1:8771
+(`START_GL_TRADER.bat`). **No real-money trades, no guaranteed
+accuracy** — full details + risk warning in
+[JARVIS_GL_TRADER/README.md](JARVIS_GL_TRADER/README.md).
