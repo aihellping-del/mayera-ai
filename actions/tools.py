@@ -689,6 +689,44 @@ def function_declarations():
                 type=types.Type.OBJECT, properties={}),
         ),
         types.FunctionDeclaration(
+            name="run_command",
+            description=(
+                "Run ONE Windows CMD command on the user's PC. "
+                "PERMISSION IS BUILT IN: before anything runs, an "
+                "on-screen card shows him the EXACT command and "
+                "only his own 'Haan' tap runs it - a 'cancelled' "
+                "result means it did NOT run, never argue. "
+                "Catastrophic commands (format, shutdown, system "
+                "wipers) are refused outright by the tool itself. "
+                "60-second limit; output comes back truncated."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "command": types.Schema(
+                        type=types.Type.STRING,
+                        description="The exact CMD command line to run.")},
+                required=["command"]),
+        ),
+        types.FunctionDeclaration(
+            name="run_python",
+            description=(
+                "Write and run a short Python script on the "
+                "user's PC (same permission card as run_command: "
+                "the EXACT code is shown to him first and only "
+                "his 'Haan' runs it). For small calculations, "
+                "file checks and automations a normal tool "
+                "cannot do. 60-second limit; output truncated."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "code": types.Schema(
+                        type=types.Type.STRING,
+                        description="The exact Python code to run.")},
+                required=["code"]),
+        ),
+        types.FunctionDeclaration(
             name="browser_close_tab",
             description=(
                 "Close ONLY the current tab in JARVIS's own "
@@ -791,7 +829,7 @@ _BROWSER_TOOLS = {"browser_search", "browser_research",
 class ToolExecutor:
     def __init__(self, store, opener=None, pc=None, yt=None, vision=None,
                  plugins=None, files=None, confirm=None, browser=None,
-                 whatsapp=None, whatsapp_desktop=None):
+                 whatsapp=None, whatsapp_desktop=None, commands=None):
         self._store = store
         self._opener = opener or webbrowser.open
         self._pc = pc  # PcController (v3.1 PC Control pack) or None
@@ -804,6 +842,7 @@ class ToolExecutor:
         # v3.27: the desktop-APP messenger (his installed WhatsApp)
         # is the primary route; the web one is the fallback.
         self._whatsapp_desktop = whatsapp_desktop
+        self._commands = commands  # CommandRunner (v3.32) or None
         if plugins is None:
             try:
                 from plugins import loader as plugins_loader
@@ -826,6 +865,8 @@ class ToolExecutor:
                     self._run_plugin, name, args)
             if name == "forget_memory":
                 return self._forget(args.get("query", ""))
+            if name in ("run_command", "run_python"):
+                return await self._command_action(name, args)
             if name == "whatsapp_send":
                 return await self._whatsapp_action(args)
             if name in _BROWSER_TOOLS:
@@ -981,6 +1022,26 @@ class ToolExecutor:
         except Exception as exc:  # noqa: BLE001 - reported to the model
             return {"status": "error",
                     "message": f"plugin {name}: {exc.__class__.__name__}"}
+
+    async def _command_action(self, name, args):
+        """run_command / run_python (v3.32): the runner enforces
+        the denylist + confirm card itself; here we supply the
+        gate and a thread (subprocess must not block the loop)."""
+        if self._commands is None:
+            return {"status": "error", "message": "command runner unavailable"}
+
+        def _sync_confirm(question):
+            if self._confirm is None:
+                return False
+            return bool(self._confirm.ask(question))
+
+        if name == "run_command":
+            return await asyncio.to_thread(
+                self._commands.run_command,
+                args.get("command", ""), _sync_confirm)
+        return await asyncio.to_thread(
+            self._commands.run_python,
+            args.get("code", ""), _sync_confirm)
 
     async def _whatsapp_action(self, args):
         """whatsapp_send: the messenger enforces the confirm card

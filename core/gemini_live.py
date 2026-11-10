@@ -32,6 +32,20 @@ from google.genai import types
 
 from config import settings as config
 from actions import tools as tools_mod
+
+# Per-tool timeouts in seconds (v3.32): generous where a human
+# is in the loop (the WhatsApp flows wait on his card tap and
+# vision steps), tight enough that nothing hangs forever.
+TOOL_TIMEOUTS = {
+    "whatsapp_send": 150,
+    "run_command": 90,
+    "run_python": 90,
+    "click_on_screen": 60,
+    "browser_research": 60,
+    "browser_search": 45,
+    "look_at_screen": 45,
+}
+DEFAULT_TOOL_TIMEOUT = 45
 from core.audio_utils import ensure_bytes
 from core.errors import MayeraError, friendly_error
 
@@ -216,6 +230,12 @@ class GeminiLiveSession:
     @property
     def is_connected(self):
         return self._session is not None
+
+    @property
+    def running_tool_tasks(self):
+        """Background tool batches still running (v3.32, for the
+        performance dashboard in /health)."""
+        return sum(1 for t in self._tool_tasks if not t.done())
 
     def _save_checkpoint(self):
         if self._store is None or not self._store.memory_enabled():
@@ -751,6 +771,8 @@ class GeminiLiveSession:
         "click_on_screen": "Screen par dhoondh kar click kar raha hai...",
         "whatsapp_send": "WhatsApp khol raha hai...",
         "browser_close_tab": "Tab band kar raha hai...",
+        "run_command": "Command chalane se pehle card dikha raha hai...",
+        "run_python": "Python chalane se pehle card dikha raha hai...",
     }
 
     def _spawn_tool_calls(self, function_calls):
@@ -780,8 +802,20 @@ class GeminiLiveSession:
         print(f"  [tool] {call.name} called with {_args_short}",
               flush=True)
         _t0 = time.monotonic()
+        # Per-tool timeout (v3.32, spec §7): a hung tool must not
+        # hang its batch - or the conversation - forever. The
+        # executor's thread work cannot be killed, but its result
+        # is discarded and the model gets a clean timeout answer.
+        _timeout = TOOL_TIMEOUTS.get(call.name, DEFAULT_TOOL_TIMEOUT)
         try:
-            result = await self._tools.execute(call.name, args)
+            result = await asyncio.wait_for(
+                self._tools.execute(call.name, args), timeout=_timeout)
+        except asyncio.TimeoutError:
+            print(f"  [tool] {call.name} TIMEOUT ({_timeout}s) - "
+                  "rok diya gaya", flush=True)
+            result = {"status": "error",
+                      "message": f"ye kaam {_timeout} second me pura "
+                                 "nahi hua - rok diya gaya hai"}
         except Exception as exc:  # noqa: BLE001 - reported, never fatal
             result = {"status": "error",
                       "message": exc.__class__.__name__}

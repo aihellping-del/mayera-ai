@@ -84,6 +84,7 @@ from actions.browser_agent import BrowserAgent  # noqa: E402
 from actions.file_ops import FileOps  # noqa: E402
 from actions.whatsapp import WA_PART, WA_URL, WhatsAppMessenger  # noqa: E402
 from actions.whatsapp_desktop import WhatsAppDesktop  # noqa: E402
+from actions.command_runner import CommandRunner  # noqa: E402
 from core.confirm import ConfirmGate  # noqa: E402
 
 confirm_gate = ConfirmGate()
@@ -106,6 +107,7 @@ tool_executor = ToolExecutor(
     whatsapp=WhatsAppMessenger(_browser_agent),  # v3.25: web fallback
     # v3.27: PRIMARY route - the WhatsApp app already on his PC
     whatsapp_desktop=WhatsAppDesktop(_pc, _vision),
+    commands=CommandRunner(),  # v3.32: CMD/Python, card-gated
 )
 watcher = ProactiveWatcher(store)
 
@@ -434,6 +436,12 @@ async def health():
         },
         "tools": _tool_stats(),
         "client_playback": dict(client_playback),
+        "sessions": {
+            "websocket": manager.active_sessions,
+            "background_tool_tasks": (
+                live_session.running_tool_tasks
+                if live_session is not None else 0),
+        },
     }
 
 

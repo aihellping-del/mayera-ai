@@ -24,6 +24,12 @@ class ConnectionManager:
         self.audio_dropped = 0   # chunks dropped by the overflow guard
         self.audio_sent = 0      # chunks actually written to the socket
 
+    @property
+    def active_sessions(self):
+        """1 while the HUD client is connected, else 0 (v3.32 -
+        this manager is single-client by design; see docstring)."""
+        return 1 if self._ws is not None else 0
+
     async def register(self, websocket):
         """Make `websocket` the active client; close any previous one."""
         async with self._lock:

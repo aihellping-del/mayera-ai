@@ -1219,3 +1219,33 @@ Tests: 4/4 new (~/workspace/test_updater_checksums.py - parse,
 stale-stale-good retry success, always-stale aborts after 4,
 legacy single fetch) + the v3.31.0 fake-install re-verified
 clean after CDN settled.
+
+--- v3.32.0 addendum (2026-11-10): ULTRA FAST SPEC - GAP BUILD ---
+User pasted the 'JARVIS ULTRA FAST AI AGENT' spec. Gap analysis
+against the live code first: most of it ALREADY exists and was
+NOT rebuilt - streaming Live voice + pre-warm (v3.0), background
+tool tasks that never block voice (v3.14), reconnect state
+machine with backoff+jitter (v3.7, root-fixed v3.11), adaptive
+audio buffering (v3.14/v3.28/v3.31), 16k-in/24k-out formats,
+own-browser + screen control (§3), parallel-safe tool subset +
+dedupe (v3.14), SQLite memory + recall (§5), model ladder +
+separate vision model (§6, partial by architecture: the Live
+session model is per-session), confirmation gates (§9).
+Genuinely missing and BUILT here:
+(1) run_command + run_python (47 declarations) behind the
+always-on Haan/Nahi card showing the exact command/code - a
+catastrophic denylist (format, shutdown, rd /s, registry
+edits, net user /add, diskpart, system-folder del) is refused
+outright even with approval; home cwd, 60 s timeout, output
+truncated to 1500 chars; Python via his own interpreter + a
+temp file deleted after. AGENTS.md records the exception.
+(2) Per-tool timeouts in _run_one_tool (spec §7): a hung tool
+returns a clean timeout error instead of hanging its batch;
+whatsapp_send 150 s (human card tap inside), default 45 s.
+(3) Dashboard (§8): /health gains a sessions block (active
+WebSocket 0/1 - the manager is single-client by design - and
+running background tool tasks); the Diagnostics box shows
+both next to connection state.
+Tests: 19/19 new (~/workspace/test_command_runner.py) + every
+regression suite + Node 11/11 + smoke with /health sessions
+verified live. Live-voice proof still needs his PC as always.

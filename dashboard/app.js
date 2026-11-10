@@ -471,9 +471,9 @@ async function refreshDiag() {
   try {
     const h = await (await fetch("/health")).json();
     const c = h.client_playback || {};
-    const a = h.audio || {}, t = h.tools || {};
+    const a = h.audio || {}, t = h.tools || {}, s = h.sessions || {};
     box.textContent =
-      `Connection: ${h.connection_state} • Reconnects: ${h.reconnect_count}` +
+      `Connection: ${h.connection_state} • Reconnects: ${h.reconnect_count} • WS sessions: ${s.websocket ?? "-"} • Background tasks: ${s.background_tool_tasks ?? "-"}` +
       `\nJawab latency: last ${h.last_reply_latency_s ?? "-"}s • avg ${h.avg_reply_latency_s ?? "-"}s (${h.replies_measured} replies)` +
       `\nAudio out: ${a.ai_chunks_sent} chunks bheje • Mic in: ${a.mic_chunks_received} chunks` +
       `\nSpeaker (browser): played ${c.played ?? "-"} • gap (starved) ${c.starved ?? "-"} • dropped ${c.droppedQueue ?? "-"} • buffer ${c.bufferMs ?? "-"} ms` +
