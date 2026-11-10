@@ -274,10 +274,13 @@ function playAiAudio(arrayBuffer) {
   src.connect(ctx.destination);
 
   const now = ctx.currentTime;
-  // Overflow guard: if more than ~6 s of audio is already queued
+  // Overflow guard: if more than ~10 s of audio is already queued
   // (a stall burst dumped a backlog), drop the backlog instead of
   // speaking stale audio for seconds - restart cleanly at "now".
-  if (playHead - now > 6) {
+  // (v3.31: 6 -> 10 s - at 6 s a long sentence's own tail could be
+  // dropped, which the user heard as 'atak gaya, dusre point par
+  // chala gaya'.)
+  if (playHead - now > 10) {
     const dropped = scheduled.size;
     scheduled.forEach((s) => { try { s.stop(); } catch {} });
     scheduled.clear();

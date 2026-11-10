@@ -92,8 +92,13 @@ def rms_level(data):
     return math.sqrt(total / n) / 32768.0
 
 
-def should_forward_mic(level, last_ai, now, window=1.2, loud=0.22):
-    """Noise gate for while JARVIS himself is speaking (v3.23).
+def should_forward_mic(level, last_ai, now, window=2.5, loud=0.22):
+    """Noise gate for while JARVIS himself is speaking (v3.23;
+    window widened 1.2 -> 2.5 s in v3.31 - with the short window,
+    TV/family noise landing just after a sentence chunk still
+    cut him mid-point; a genuinely loud voice - a real barge-in
+    or Stop - passes instantly at any time, so the wider window
+    costs the user nothing).
 
     The user's report: while JARVIS is mid-sentence, any background
     sound (TV, family talking, a door) reaches Gemini, its VAD

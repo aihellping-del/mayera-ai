@@ -1177,3 +1177,23 @@ Tests: 5/5 new (~/workspace/test_chrome_only.py - msedge absent
 from both finders, fake-winreg registry hit for both modules,
 missing winreg degrades to None) + browser/app-window/HUD/
 WhatsApp regressions + server smoke.
+
+--- v3.31.0 addendum (2026-11-10): BAAT PURI KARO ---
+User: 'jab bolta hai to atak jata hai, phir dusre point me
+chale jata hai - usi ko continue nahi karta jisme atak jata
+hai.' Three cuts fixed: (1) the playback overflow guard dropped
+queued audio at >6 s backlog - a long sentence's own tail could
+be dropped, heard as a jump to another point; threshold now
+10 s. (2) The noise-gate tail window (v3.23) was 1.2 s - TV /
+family noise landing just after a chunk could still interrupt
+mid-point; window widened to 2.5 s (a LOUD voice, a real
+barge-in or Stop, still passes instantly, so he loses nothing).
+(3) The missing behaviour rule, now in the instruction as BAAT
+PURI KARO: if a baat is cut anywhere, the next reply FIRST
+finishes that same baat from where it stopped - never abandon
+an unfinished point for a new topic; and do not stop mid-point
+yourself - one point, one breath, complete.
+Tests: noise gate 14/14 (window edges re-derived: gate opens
+strictly past 2.5 s; the old 1.3 s gap is now gated too), Node
+playback 11/11 (overflow scenario rebuilt at 12 s), screen /
+smooth / WhatsApp-desktop / HUD / Chrome regressions, smoke.
