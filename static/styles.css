@@ -216,21 +216,53 @@ body[data-state="listening"] .wave i, body[data-state="speaking"] .wave i { anim
 }
 
 
-/* ===== THEME 11: PARTICLE HEAD - BLUE (photo wala style) ===== */
-:root { --pc-main: #38bdf8; --pc-light: #bae6fd; --pc-brain: #f59e0b; --pc-brain2: #fde68a; --pc-glow: #2563eb; }
-body { background: radial-gradient(1000px 640px at 50% 30%, #04101f 0%, #020610 58%, #010204 100%); }
+/* ===== THEME 14: RAINBOW FLOW (user's photo wala style) =====
+   Pure black stage, flowing rainbow lines (flow.js), NO centre
+   status text - instead a GREEN LINE glows in its place whenever
+   JARVIS is live (listening / thinking / speaking). Red = error. */
+:root { --fl-on: 1; }
+body { background: radial-gradient(900px 620px at 50% 34%, #060607 0%, #000000 62%, #000000 100%); }
 #pcanvas { position: absolute; width: 440px; height: 440px; left: 50%; top: 44%; transform: translate(-50%, -50%); z-index: 1; pointer-events: none; }
 .orb, .ring, .core, .face { display: none !important; }
-.orb-wrap::after { border-color: rgba(56,189,248,.35); background: radial-gradient(ellipse, rgba(37,99,235,.25), transparent 70%); box-shadow: 0 0 30px rgba(37,99,235,.35); bottom: -18px; }
-.sidewave { opacity: .3; }
-.logo { background: linear-gradient(135deg, #38bdf8, #2563eb); box-shadow: 0 0 16px rgba(56,189,248,.6); }
-.conn { border-color: rgba(56,189,248,.35); }
+.orb-wrap::after { display: none; }
+.bg-glow { display: none; }
+.frame { display: none; }
+.sidewave { display: none; }
+.floor { display: none; }
+.stars span { background: #ffffff; }
+.logo { background: linear-gradient(135deg, #22d3ee, #a3e635 38%, #f59e0b 68%, #ec4899); box-shadow: 0 0 16px rgba(163,230,53,.45); }
+.conn { border-color: rgba(255,255,255,.22); }
 .conn.mem { color: #fcd34d; }
-.icon-btn { border-color: rgba(56,189,248,.4); }
-.icon-btn:hover { border-color: #38bdf8; box-shadow: 0 0 12px rgba(56,189,248,.5); }
-.status { color: #bae6fd; text-shadow: 0 0 14px rgba(56,189,248,.5); }
-.wave i { background: linear-gradient(180deg, #7dd3fc, #38bdf8, #f59e0b); }
-.controls .btn-start { background: linear-gradient(#04101f, #04101f) padding-box, linear-gradient(135deg, #38bdf8, #2563eb, #f59e0b) border-box; box-shadow: 0 0 34px rgba(37,99,235,.55), 0 0 70px rgba(56,189,248,.3); }
-.floor i:nth-child(1) { border-color: rgba(56,189,248,.3); }
-.floor i:nth-child(2) { border-color: rgba(37,99,235,.45); box-shadow: 0 0 24px rgba(37,99,235,.3); }
-.floor i:nth-child(3) { border-color: rgba(125,211,252,.5); box-shadow: 0 0 30px rgba(56,189,248,.35); }
+.icon-btn { border-color: rgba(255,255,255,.25); }
+.icon-btn:hover { border-color: #a3e635; box-shadow: 0 0 12px rgba(163,230,53,.5); }
+/* user bola: beech wala "Sun raha hu" text hide karo */
+.status { display: none !important; }
+/* uski jagah: GREEN LINE */
+.voice-line {
+  order: 2; z-index: 1; width: 180px; height: 4px; border-radius: 999px;
+  margin-top: 2px;
+  background: linear-gradient(90deg, rgba(34,255,136,0), #22ff88 28%, #c9ffe0 50%, #22ff88 72%, rgba(34,255,136,0));
+  box-shadow: 0 0 16px rgba(34,255,136,.85), 0 0 42px rgba(34,255,136,.4);
+  opacity: 0; transform: scaleX(.6);
+  transition: opacity .35s ease, transform .35s ease;
+}
+body[data-state="listening"] .voice-line,
+body[data-state="thinking"] .voice-line,
+body[data-state="speaking"] .voice-line,
+body[data-state="connecting"] .voice-line {
+  opacity: 1; transform: scaleX(1);
+  animation: linePulse 1.6s ease-in-out infinite;
+}
+body[data-state="speaking"] .voice-line { animation-duration: .7s; }
+body[data-state="error"] .voice-line {
+  opacity: 1; transform: scaleX(1); animation: none;
+  background: linear-gradient(90deg, rgba(251,113,133,0), #fb7185 30%, #fecdd3 50%, #fb7185 70%, rgba(251,113,133,0));
+  box-shadow: 0 0 16px rgba(251,113,133,.85), 0 0 42px rgba(251,113,133,.4);
+}
+@keyframes linePulse {
+  0%, 100% { transform: scaleX(.78); filter: brightness(.85); }
+  50% { transform: scaleX(1); filter: brightness(1.25); }
+}
+.wave i { background: linear-gradient(180deg, #67e8f9, #a3e635, #f59e0b, #f472b6); }
+.controls .btn-start { background: linear-gradient(#050505, #050505) padding-box, linear-gradient(135deg, #22d3ee, #a3e635, #f59e0b, #ec4899, #8b5cf6) border-box; box-shadow: 0 0 34px rgba(163,230,53,.35), 0 0 70px rgba(34,211,238,.25); }
+.hint { color: rgba(255,255,255,.55); text-shadow: none; }

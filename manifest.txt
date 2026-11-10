@@ -5,6 +5,7 @@ README.md
 START_JARVIS.bat
 START_MAYERA.bat
 TEST_REPORT.md
+github_token_setup.py
 main.py
 manifest.txt
 mayera/__init__.py
@@ -13,8 +14,8 @@ mayera/config.py
 mayera/connection_manager.py
 mayera/errors.py
 mayera/gemini_live.py
-mayera/key_vault.py
 mayera/key_prompt_gui.py
+mayera/key_vault.py
 mayera/memory_store.py
 mayera/pc_control.py
 mayera/proactive.py
@@ -22,12 +23,13 @@ mayera/tools.py
 mayera/youtube_play.py
 requirements.txt
 static/app.js
+static/flow.js
 static/index.html
+static/particles.js
 static/styles-aurora.css
 static/styles-classic.css
-static/particles.js
 static/styles-neon.css
+static/styles-particle.css
 static/styles.css
-github_token_setup.py
 updater.py
 version.txt

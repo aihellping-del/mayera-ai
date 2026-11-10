@@ -451,3 +451,26 @@ suspicious commands = stop and ask. Mirror line gained "default
 Hinglish when unclear". Instruction 3,012 -> 4,800 chars (rules,
 not reasoning; thinking budget stays 0). Checks: 13/13 instruction
 assertions, py_compile OK, regressions 12/12 + 14/14.
+
+--- v3.9.0 addendum (2026-11-10): RAINBOW FLOW UI ---
+User sent a reference photo (flowing rainbow lines on black,
+hollow starry centre) and asked: same-to-same UI, hide the centre
+"Sun raha hu" status text, put a GREEN LINE in its place.
+New default theme 14 "Rainbow Flow": static/flow.js draws 120
+strands x 64 segments of coloured lines flowing around a swirling
+contour on the shared #pcanvas (colour stops fixed by screen
+angle: cyan top, purple/pink right, orange/yellow bottom, green
+left; 'lighter' composite glow; star specks; speaking = faster +
+wider). Bug caught in preview: particles.js hides the shared
+canvas when its own theme is off, so flow.js now only touches the
+canvas when --fl-on is present and un-hides it then. styles.css:
+Particle block replaced by the Flow block (pure black, frame/
+glows/sidewaves/floor hidden, .status display:none, rainbow logo
+and START ring). index.html gains #voiceLine under the status:
+a green glowing line, visible and pulsing in listening/thinking/
+speaking/connecting states, red in error state - the status TEXT
+element still exists for app.js, it is only visually hidden.
+Particle Blue preserved as static/styles-particle.css.
+Manifest 33 -> 35 files. Verified by local server + Playwright
+screenshots (idle + forced listening): orb renders with correct
+colour zones, no centre text, green line glows while listening.
