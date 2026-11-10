@@ -46,7 +46,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from mayera.pc_control import PcController  # noqa: E402
+from actions.pc_control import PcController  # noqa: E402
 
 ENGLISH_LINE = "Hello Golu, this is JARVIS typing in Notepad."
 HINDI_LINE = "आज का काम: gym jaana hai और पानी पीना है।"

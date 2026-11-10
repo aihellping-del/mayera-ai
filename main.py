@@ -48,20 +48,20 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from mayera import config
-from mayera.audio_utils import rms_level
-from mayera.connection_manager import ConnectionManager
-from mayera.errors import MayeraError, friendly_error
-from mayera.gemini_live import GeminiLiveSession
-from mayera.memory_store import MemoryStore
-from mayera.pc_control import PcController
-from mayera.proactive import ProactiveWatcher
-from mayera.screen_vision import ScreenVision
-from mayera.tools import ToolExecutor
-from mayera.youtube_play import YoutubePlayer
+from config import settings as config
+from core.audio_utils import rms_level
+from core.connection_manager import ConnectionManager
+from core.errors import MayeraError, friendly_error
+from core.gemini_live import GeminiLiveSession
+from memory.memory_store import MemoryStore
+from actions.pc_control import PcController
+from core.proactive import ProactiveWatcher
+from actions.screen_vision import ScreenVision
+from actions.tools import ToolExecutor
+from actions.youtube_play import YoutubePlayer
 
 BASE_DIR = Path(__file__).resolve().parent
-STATIC_DIR = BASE_DIR / "static"
+STATIC_DIR = BASE_DIR / "dashboard"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -345,7 +345,9 @@ async def _no_cache(request, call_next):
     response = await call_next(request)
     response.headers["Cache-Control"] = "no-store"
     return response
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+import ui as ui_mod  # noqa: E402
+
+ui_mod.mount_dashboard(app)
 
 
 @app.get("/")
@@ -645,7 +647,7 @@ async def websocket_endpoint(ws: WebSocket):
 # Entry point
 # ---------------------------------------------------------------------------
 def ensure_api_key():
-    from mayera import key_vault
+    from providers import key_vault
 
     # 1) key already in the environment (e.g. set by hand) -> use it,
     #    and remember it on this PC if the vault is still empty.
@@ -672,7 +674,7 @@ def ensure_api_key():
     #    the black console window swallows Ctrl+V, which confused the
     #    user). Any GUI failure falls back to the console prompt below.
     try:
-        from mayera.key_prompt_gui import ask_key_gui
+        from providers.key_prompt_gui import ask_key_gui
         gui_key = ask_key_gui()
     except Exception:  # noqa: BLE001
         gui_key = None
@@ -732,7 +734,7 @@ def main():
     _install_stop_hotkey()
     url = f"http://{config.HOST}:{config.PORT}"
     if os.environ.get("MAYERA_NO_BROWSER") != "1":
-        threading.Timer(1.2, lambda: webbrowser.open(url)).start()
+        ui_mod.open_ui_later(url)
     print()
     print("  ============================================")
     print("   JARVIS AI - Voice Companion")

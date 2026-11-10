@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS AI — Voice Companion</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230ea5e9'/%3E%3Ctext x='32' y='44' font-size='34' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EJ%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body data-state="idle">
+
+  <div class="bg-glow bg-glow-a"></div>
+  <div class="bg-glow bg-glow-b"></div>
+  <div class="stars" id="stars"></div>
+  <div class="frame"><i class="fc tl"></i><i class="fc tr"></i><i class="fc bl"></i><i class="fc br"></i></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">J</span> JARVIS
+    </div>
+    <div class="top-right">
+      <div class="conn mem" id="memPill" title="JARVIS ki yaaddaasht">🧠 <span id="memText">Memory</span></div>
+      <div class="conn" id="connPill">
+        <span class="conn-dot" id="connDot"></span>
+        <span id="connText">Offline</span>
+      </div>
+      <button class="icon-btn" id="btnSettings" title="Settings">⚙️</button>
+      <button class="icon-btn" id="btnExit" title="JARVIS band karein">✕</button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <div class="sidewave left" id="swLeft"></div>
+    <div class="sidewave right" id="swRight"></div>
+
+    <!-- Neon energy orb (no face in this theme) -->
+    <div class="orb-wrap" id="orbWrap">
+      <canvas id="pcanvas" width="440" height="440"></canvas>
+      <div class="ring ring-1"></div>
+      <div class="ring ring-2"></div>
+      <div class="ring ring-3"></div>
+      <div class="orb" id="orb">
+        <div class="core"></div>
+        <div class="face">
+          <div class="eyes">
+            <div class="eye eye-left"><div class="pupil"></div></div>
+            <div class="eye eye-right"><div class="pupil"></div></div>
+          </div>
+          <div class="cheek cheek-left"></div>
+          <div class="cheek cheek-right"></div>
+          <div class="nose"></div>
+          <div class="mouth" id="mouth">
+            <div class="smile"></div>
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status" id="statusText">JARVIS taiyaar hai</div>
+    <div class="voice-line" id="voiceLine"></div>
+    <div class="wave" id="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+    <!-- Controls: voice-only experience, no chat box anywhere -->
+    <div class="controls">
+      <button id="btnMute" class="btn cbtn btn-mute" disabled><span class="ic">🎙️</span><span class="cap">MUTE</span></button>
+      <button id="btnStart" class="btn cbtn btn-start"><span class="ic">🎙️</span><span class="cap">START</span></button>
+      <button id="btnEnd" class="btn cbtn btn-end" disabled><span class="ic">📞</span><span class="cap">END</span></button>
+    </div>
+    <div class="floor"><i></i><i></i><i></i></div>
+
+    <p class="hint">Boliye Hindi, English ya Hinglish — JARVIS sun raha hai.</p>
+  </main>
+
+<!-- Settings drawer: memory controls live here (voice stays the interface) -->
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <div class="drawer-title">⚙️ JARVIS Settings</div>
+    <button class="icon-btn" id="btnCloseDrawer" title="Band karein">✕</button>
+  </div>
+
+  <label class="row">
+    <span>🧠 Yaaddaasht (Memory)</span>
+    <input type="checkbox" id="setMemory">
+  </label>
+  <p class="note">On ho to JARVIS baatein yaad rakhega aur agli baar wahi se baat aage badhayega.</p>
+
+  <label class="row">
+    <span>💬 Khud baat shuru kare (Proactive)</span>
+    <input type="checkbox" id="setProactive">
+  </label>
+  <label class="row">
+    <span>Khamoshi ke baad (minute)</span>
+    <select id="setInactivity">
+      <option value="60">1</option>
+      <option value="120">2</option>
+      <option value="300">5</option>
+      <option value="600">10</option>
+    </select>
+  </label>
+  <label class="row">
+    <span>🔍 Web search (jawab thoda slow hoga)</span>
+    <input type="checkbox" id="setWebSearch">
+  </label>
+  <label class="row">
+    <span>🧑‍🎤 Push-to-Talk (Ctrl+Space dabakar rakho, tabhi mic khulega)</span>
+    <input type="checkbox" id="setPTT">
+  </label>
+  <label class="row">
+    <span>🎙️ Microphone chuno</span>
+    <select id="setMicDevice"><option value="">Default mic</option></select>
+  </label>
+  <label class="row">
+    <span>🔊 Speaker chuno</span>
+    <select id="setSpeakerDevice"><option value="">Default speaker</option></select>
+  </label>
+  <label class="row">
+    <span>⚡ Reply ki speed</span>
+    <select id="setReplySpeed">
+      <option value="fast">Tez jawab</option>
+      <option value="patient">Araam se — beech me nahi kaategi</option>
+    </select>
+  </label>
+  <label class="row">
+    <span>Shanti ka samay (Quiet hours)</span>
+    <span class="quiet">
+      <input type="time" id="setQuietStart"> – <input type="time" id="setQuietEnd">
+    </span>
+  </label>
+
+  <div class="drawer-title small">📊 Diagnostics (live haal)</div>
+  <pre id="diagBox" class="mem-empty" style="white-space:pre-wrap;text-align:left">…</pre>
+
+  <div class="drawer-title small">Yaad rakhi baatein</div>
+  <div id="memList" class="mem-list"></div>
+  <button class="btn btn-end wide" id="btnClearMem">🗑️ Sab yaadein mita do</button>
+  <p class="note">Password aur API key kabhi yaad nahi rakhi jati.</p>
+</aside>
+<div class="scrim" id="scrim"></div>
+
+<script src="/static/app.js"></script>
+<script src="/static/particles.js"></script>
+<script src="/static/flow.js"></script>
+</body>
+</html>

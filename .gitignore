@@ -1,0 +1,12 @@
+# JARVIS - files git should never track
+.venv/
+__pycache__/
+*.pyc
+
+# User data - NEVER commit these
+mayera_memory.db
+key.dat
+gh_token.dat
+
+# Local test artifacts
+*.log

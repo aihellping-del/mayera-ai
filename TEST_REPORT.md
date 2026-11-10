@@ -762,3 +762,27 @@ drawer smoke (PTT toggle saves push_to_talk=1, device selects
 render, 0 JS errors) + regressions 12/12 + 14/14 + 15/15 + 8/8 +
 49/49 + 42/42 + 13/13 + Node playback 11/11 (counts updated
 18 -> 20 declarations in two suites).
+
+--- v3.16.0 addendum (2026-11-10): PROJECT STRUCTURE (user's screenshot) ---
+The user sent the folder layout of Mark LVI (by FatihMakes, CC
+BY-NC 4.0) and asked for the same structure in JARVIS. The code was
+reorganised WITHOUT behaviour changes: mayera/ -> core/ (engine:
+gemini_live, connection_manager, audio_utils, proactive, errors,
+updater), config/settings.py, memory/memory_store.py, actions/
+(tools, pc_control, screen_vision, youtube_play), providers/
+(key_vault, key_prompt_gui), plugins/ (loader moved in, dice plugin,
+README); static/ -> dashboard/ (still served at the /static URL so
+saved pages/links are untouched); root gains ui.py (dashboard
+serving + browser open), setup.py (Python twin of INSTALL.bat),
+AGENTS.md, LICENSE (MIT for this project), .gitignore. START .bat
+files now call core\updater.py; the updater's ROOT is its parent's
+parent (project root). Deliberately unchanged: mayera_memory.db
+filename, key.dat, env var names, repo name - existing installs'
+keys, memories and update chain survive. Manifest 40 -> 50 files.
+ALL suites pass on the new layout BEFORE shipping: 12/12 + 14/14 +
+15/15 + 8/8 + 49/49 + 42/42 + 13/13 + 31/31 + Node playback 11/11 +
+server smoke (boots, /health ok, page + app.js 200 from dashboard/).
+The transition proof (an OLD-layout install self-updating into the
+new folder tree via its own old updater) runs against the live repo
+right after this push, including from the user's own uploaded
+v2.5.0 ZIP - results appended below.

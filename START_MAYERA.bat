@@ -30,9 +30,9 @@ REM --- auto-update check: naya version ho to khud lag jayega ----------
 REM     (internet na ho to ye chup-chaap aage badh jata hai,
 REM      MAYERA kabhi update ki wajah se nahi rukti)
 if exist ".venv\Scripts\python.exe" (
-    ".venv\Scripts\python.exe" updater.py
+    ".venv\Scripts\python.exe" core\updater.py
 ) else (
-    python updater.py
+    python core\updater.py
 )
 
 echo.
