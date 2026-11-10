@@ -1408,3 +1408,16 @@ run START_GL_TRADER.bat, badge must read MT5-LIVE.
 RAM note: pure Python, candle cache capped at 500/pair - built
 for his 8GB RAM laptop (brief said 8GB; earlier notes said 12GB,
 the tighter figure was used).
+
+--- v3.35.1 HOTFIX (2026-11-11): checksums.txt SELF-ENTRY REMOVED ---
+Bug found from the user's live update attempt: v3.35.0's
+checksums.txt contained a hash entry for checksums.txt itself.
+A file can never match its own embedded hash, so the updater's
+_fetch_verified("checksums.txt") failed after retries and the
+WHOLE update aborted by design ("Update beech me ruk gaya -
+purana JARVIS hi chalega"), leaving the user on v3.34.0 with no
+GL Trader files. Fix: checksums.txt no longer lists itself
+(all other 88 entries unchanged and verified); the file is
+still downloaded with every update, just not self-verified.
+Verified by a fake v3.34.0 install self-updating from the
+LIVE repo to v3.35.1 with GL Trader files arriving.
