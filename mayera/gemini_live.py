@@ -21,6 +21,7 @@ Audio is bytes end to end. Nothing is ever .encode()d here.
 """
 
 import asyncio
+import random
 import time
 
 from google import genai
@@ -54,6 +55,16 @@ class GeminiLiveSession:
         self._recv_task = None
         self._reconnect_task = None
         self._send_lock = asyncio.Lock()
+        # Connection state machine (v3.7, spec B): DISCONNECTED ->
+        # CONNECTING -> CONNECTED -> RECONNECTING -> CONNECTED ...,
+        # ERROR when reconnects are exhausted. Shown in /health.
+        self.state = "DISCONNECTED"
+        self.reconnect_count = 0
+        self.last_reconnect_seconds = None
+        self._last_msg_at = 0.0    # last message FROM Gemini
+        self._last_tool_at = 0.0   # last tool execution (stuck guard)
+        self._send_failed = False  # a send failed on a "live" session
+        self._reconnect_started = 0.0
         self._stopped = True
         self._resumption_handle = None
         self._model_in_use = None
@@ -127,6 +138,7 @@ class GeminiLiveSession:
 
     async def stop(self):
         self._stopped = True
+        self.state = "DISCONNECTED"
         self._save_checkpoint()
         if self._reconnect_task is not None:
             self._reconnect_task.cancel()
@@ -313,10 +325,11 @@ class GeminiLiveSession:
                 models = [last] + [m for m in models if m != last]
         return models
 
-    async def _try_models(self):
+    async def _try_models(self, attempt_timeout=None):
         """Try models fast-first: tools+no-thinking, then no-tools,
         then the same again with thinking left on (old behaviour) as
         a last resort. True if connected."""
+        timeout = attempt_timeout or config.CONNECT_TIMEOUT_SECONDS
         combos = ((True, True), (False, True), (True, False),
                   (False, False))
         for with_tools, fast_thinking in combos:
@@ -325,7 +338,7 @@ class GeminiLiveSession:
                 try:
                     await asyncio.wait_for(
                         self._open(model, with_tools, fast_thinking),
-                        timeout=config.CONNECT_TIMEOUT_SECONDS)
+                        timeout=timeout)
                 except Exception as exc:  # noqa: BLE001
                     elapsed = time.monotonic() - started
                     print(f"  [connect] {model} nahi chala "
@@ -351,12 +364,16 @@ class GeminiLiveSession:
         return False
 
     async def _connect_with_fallback(self):
+        self.state = "CONNECTING"
         if not await self._try_models():
+            self.state = "ERROR"
             raise MayeraError(
                 "network_error",
                 "Gemini se connect nahi ho paya. Internet check karke "
                 "dobara try karein.",
             )
+        self.state = "CONNECTED"
+        self._send_failed = False
         await self._on_status("connected", "JARVIS connected hai.")
         self._recv_task = asyncio.create_task(self._receive_loop())
 
@@ -375,9 +392,31 @@ class GeminiLiveSession:
         task = self._reconnect_task
         if task is not None and not task.done():
             return
+        if self.state in ("CONNECTED", "CONNECTING"):
+            self.state = "RECONNECTING"
         self._reconnect_task = asyncio.create_task(self._reconnect())
 
     async def _reconnect(self):
+        # Nothing inside a reconnect may ever kill the app or die
+        # silently (v3.7): the worst case is an honest ERROR status.
+        try:
+            await self._reconnect_inner()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            print(f"  [reconnect] unexpected error: "
+                  f"{exc.__class__.__name__}: {exc}", flush=True)
+            self.state = "ERROR"
+            try:
+                await self._on_status(
+                    "error",
+                    "Reconnect me gadbad ho gayi. START TALKING dobara "
+                    "dabayein.")
+            except Exception:  # noqa: BLE001
+                pass
+
+    async def _reconnect_inner(self):
+        self._reconnect_started = time.monotonic()
         # Take over cleanly first: stop the old receive loop before
         # touching the session, so two loops never fight over one
         # connection.
@@ -403,24 +442,66 @@ class GeminiLiveSession:
             )
             await self._close_session()
             try:
-                ok = await self._try_models()
+                # Reconnects are mid-conversation: a hanging candidate
+                # gets 4s, not 10s (v3.7) - that wait WAS the 13s+
+                # reply delay in the user's log.
+                ok = await self._try_models(
+                    attempt_timeout=config.RECONNECT_ATTEMPT_TIMEOUT)
             except MayeraError as err:
+                self.state = "ERROR"
                 await self._on_status("error", err.message)
                 return
             if ok and self._session is not None:
                 if self._stopped:
                     await self._close_session()
                     return
+                self.state = "CONNECTED"
+                self._send_failed = False
+                self.reconnect_count += 1
+                self.last_reconnect_seconds = round(
+                    time.monotonic() - self._reconnect_started, 1)
+                print(f"  [reconnect] judne me kul "
+                      f"{self.last_reconnect_seconds:.1f}s laga "
+                      f"(reconnect #{self.reconnect_count})", flush=True)
                 await self._on_status("connected", "JARVIS phir se connected hai.")
                 self._recv_task = asyncio.create_task(self._receive_loop())
                 return
-            await asyncio.sleep(delay)
-            delay *= 2
+            if self._resumption_handle:
+                # A stale resumption handle can make every attempt
+                # fail while a FRESH connect would succeed (v3.7).
+                # Drop it once and continue with plain connects.
+                print("  [reconnect] purana session handle kaam nahi "
+                      "kar raha - fresh connect try kar raha hu",
+                      flush=True)
+                self._resumption_handle = None
+            # Exponential backoff WITH jitter (v3.7): fixed delays
+            # make repeated retries collide with the same network
+            # moment; jitter spreads them. No sleep after the FINAL
+            # attempt - the ERROR should surface at once.
+            if attempt < config.MAX_RECONNECT_ATTEMPTS:
+                await asyncio.sleep(delay * random.uniform(0.75, 1.25))
+                delay *= 2
+        self.state = "ERROR"
         await self._on_status(
             "error",
             "Baar-baar connect fail ho raha hai. Internet check karke "
             "START TALKING dobara dabayein.",
         )
+
+    def force_reconnect(self, reason=""):
+        """Reconnect NOW because the session looks dead although no
+        error surfaced (called by main.py's watchdog when a reply is
+        25s overdue). Refuses while a tool just ran - that turn may
+        still be finishing legitimately."""
+        if self._stopped or self._session is None:
+            return
+        if self.state != "CONNECTED":
+            return
+        if time.monotonic() - self._last_tool_at < 15:
+            return
+        print(f"  [stuck] {reason} - session dead lagta hai, "
+              f"reconnect kar raha hu", flush=True)
+        self._schedule_reconnect()
 
     # ------------------------------------------------------------------
     # sending microphone audio
@@ -441,7 +522,17 @@ class GeminiLiveSession:
                 else:
                     await session.send(input=blob, end_of_turn=False)
             except Exception:
-                pass  # receive loop owns reconnection
+                # A failed send on a session we believe is CONNECTED
+                # means the socket died silently (half-open: no error
+                # will ever arrive on the receive side). Detect it
+                # here instead of swallowing it (v3.7) - once per
+                # episode, and the single reconnect owner dedupes.
+                if self.state == "CONNECTED" and not self._send_failed:
+                    self._send_failed = True
+                    print("  [net] Gemini ko audio nahi bhej paya - "
+                          "connection dead lagta hai, reconnect kar "
+                          "raha hu", flush=True)
+                    self._schedule_reconnect()
 
     # ------------------------------------------------------------------
     # receiving: audio + transcription + tool calls
@@ -455,6 +546,7 @@ class GeminiLiveSession:
                 async for response in session.receive():
                     if self._stopped or self._session is not session:
                         return
+                    self._last_msg_at = time.monotonic()
                     await self._handle_response(response)
                 # receive() ended on its own: the server closed the
                 # session (Gemini Live sessions have a time limit).
@@ -530,6 +622,7 @@ class GeminiLiveSession:
     async def _handle_tool_calls(self, function_calls):
         if self._tools is None or self._session is None:
             return
+        self._last_tool_at = time.monotonic()
         responses = []
         for call in function_calls:
             _t0 = time.monotonic()

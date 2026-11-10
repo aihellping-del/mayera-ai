@@ -391,3 +391,38 @@ Session-resumption handle use is unchanged, so the conversation
 context carries over. 12/12 fake-session tests pass: clean close,
 receive error, go_away, double trigger, stop-during-backoff, and
 no-reconnect-after-stop. (Test: ~/workspace/test_reconnect.py.)
+
+--- v3.7.0 addendum (2026-11-10): STABILITY & RECONNECT DEBUG PASS ---
+User's debug spec + his real log (reconnects frequent, one reply at
+13.72s right after a reconnect, "WARNING WebSocket error:
+WebSocketDisconnected"). Root causes found by full inspection:
+(1) The 13.72s was the RECONNECT ITSELF: reconnect attempts reused
+the 10s per-model timeout, so one black-holed attempt ate the whole
+wait. (2) A stale session-resumption handle could fail every attempt
+in a round while a fresh connect would succeed - it was never
+cleared. (3) Silently-dead (half-open) sockets were invisible:
+send_audio swallowed failures and nothing detected a dead session
+while he was speaking. (4) Two tabs racing START could build two
+Gemini sessions (double audio) - the start branch had no lock.
+(5) The WARNING was Starlette's WebSocketDisconnected (RuntimeError
+for touching a closed socket during a normal tab close) landing in
+the generic error handler - a logging bug, not a fault.
+Fixes: connection state machine (DISCONNECTED/CONNECTING/CONNECTED/
+RECONNECTING/ERROR) + reconnect_count/last_reconnect_seconds in
+/health and a "[reconnect] judne me kul Xs" terminal line; reconnect
+attempt timeout 10s -> 4s (config.RECONNECT_ATTEMPT_TIMEOUT);
+exponential backoff WITH jitter, no sleep after the final attempt;
+resumption handle cleared after a fully-failed round; send-failure
+on a CONNECTED session schedules a reconnect (once per episode);
+main.py watchdog force-reconnects when a reply is 25s overdue
+(session refuses while a tool ran in the last 15s); global start
+lock; WebSocketDisconnected logged as a normal disconnect; errors.py
+gender forms fixed. app.js audio scheduling audited - healthy
+(30ms lookahead, back-to-back playHead, no buffer growth).
+Tests: 12/12 v3.6 regression + 14/14 new session tests (states,
+jitter bounds, stale handle, send-failure, stuck guard) + 5/5
+main.py tests (health fields, two-tab START race builds ONE
+session). One test-fake bug and one real nit (backoff sleep after
+the final attempt) were found and fixed along the way; a corrupted
+line introduced by an edit (space in end_of_turn) was caught by
+py_compile and restored from the repo copy before shipping.

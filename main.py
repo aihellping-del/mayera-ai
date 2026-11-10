@@ -69,6 +69,10 @@ logging.basicConfig(
 log = logging.getLogger("jarvis")
 
 manager = ConnectionManager()
+# One START may build a session at a time (v3.7): a double START
+# (double-click / app.js retry) must never create two Gemini
+# sessions that then talk over each other.
+start_lock = asyncio.Lock()
 store = MemoryStore()
 tool_executor = ToolExecutor(store, pc=PcController(), yt=YoutubePlayer())
 watcher = ProactiveWatcher(store)
@@ -247,6 +251,17 @@ async def watchdog():
                 and not voice_state["thinking_sent"]):
             voice_state["thinking_sent"] = True
             await send_ui_status("thinking", "JARVIS soch raha hai...")
+        # Dead-session detector (v3.7): he finished speaking 25s ago
+        # and not a sound came back. A healthy session NEVER takes
+        # this long (his worst real tool turn was ~13s); the socket
+        # has died silently, so reconnect instead of waiting forever.
+        # awaiting_reply is cleared so this fires once per stuck turn.
+        if (voice_state["awaiting_reply"]
+                and now - voice_state["last_voice"] > 25):
+            voice_state["awaiting_reply"] = False
+            print("  [stuck] 25s se koi jawab nahi aaya - "
+                  "connection dead lagta hai", flush=True)
+            session.force_reconnect("25s se koi jawab nahi")
         # proactive check-in
         if watcher.should_nudge():
             cp = store.get_checkpoint() if store.memory_enabled() else None
@@ -298,6 +313,13 @@ async def health():
         "memory_enabled": store.memory_enabled(),
         "memories": store.count_memories(),
         "proactive_enabled": store.proactive_enabled(),
+        "connection_state": (live_session.state
+                             if live_session is not None
+                             else "DISCONNECTED"),
+        "reconnect_count": (live_session.reconnect_count
+                            if live_session is not None else 0),
+        "last_reconnect_s": (live_session.last_reconnect_seconds
+                             if live_session is not None else None),
         "last_reply_latency_s": (round(latency_samples[-1], 2)
                                  if latency_samples else None),
         "avg_reply_latency_s": (round(sum(latency_samples)
@@ -445,33 +467,19 @@ async def websocket_endpoint(ws: WebSocket):
             ctype = control.get("type")
 
             if ctype == "start":
-                in_call = True
-                # Fresh call, fresh voice state (v3.0.1): no stale
-                # 'thinking'/latency state may leak across calls.
-                voice_state.update({
-                    "talking": False, "thinking_sent": False,
-                    "last_voice": 0.0, "last_ai": 0.0,
-                    "awaiting_reply": False})
-                # v3.0 warm path: a pre-warmed session is already
-                # connected, so START is instant - just greet + listen.
-                if live_session is not None and live_session.is_connected:
-                    mic_muted = False
-                    watcher.reset()
-                    voice_state["awaiting_reply"] = False
-                    await send_ui_status(
-                        "listening", "JARVIS sun raha hai... boliye!")
-                    await live_session.greet()
-                    continue
-                # Pre-warm still running: wait for it, then go warm.
-                if prewarm_task is not None:
-                    await send_ui_status(
-                        "connecting", "Gemini se connect ho raha hai...")
-                    try:
-                        await asyncio.shield(prewarm_task)
-                    except Exception:  # noqa: BLE001
-                        pass
-                    if live_session is not None \
-                            and live_session.is_connected:
+                if start_lock.locked():
+                    continue  # a START is already being handled
+                async with start_lock:
+                    in_call = True
+                    # Fresh call, fresh voice state (v3.0.1): no stale
+                    # 'thinking'/latency state may leak across calls.
+                    voice_state.update({
+                        "talking": False, "thinking_sent": False,
+                        "last_voice": 0.0, "last_ai": 0.0,
+                        "awaiting_reply": False})
+                    # v3.0 warm path: a pre-warmed session is already
+                    # connected, so START is instant - just greet + listen.
+                    if live_session is not None and live_session.is_connected:
                         mic_muted = False
                         watcher.reset()
                         voice_state["awaiting_reply"] = False
@@ -479,31 +487,48 @@ async def websocket_endpoint(ws: WebSocket):
                             "listening", "JARVIS sun raha hai... boliye!")
                         await live_session.greet()
                         continue
-                # Cold path (same as before v3.0): connect now.
-                await send_ui_status(
-                    "connecting", "Gemini se connect ho raha hai...")
-                try:
-                    if live_session is not None:
+                    # Pre-warm still running: wait for it, then go warm.
+                    if prewarm_task is not None:
+                        await send_ui_status(
+                            "connecting", "Gemini se connect ho raha hai...")
                         try:
-                            await live_session.stop()
+                            await asyncio.shield(prewarm_task)
                         except Exception:  # noqa: BLE001
                             pass
-                        live_session = None
-                    live_session = _build_session()
-                    await live_session.start()
-                    mic_muted = False
-                    watcher.reset()
+                        if live_session is not None \
+                                and live_session.is_connected:
+                            mic_muted = False
+                            watcher.reset()
+                            voice_state["awaiting_reply"] = False
+                            await send_ui_status(
+                                "listening", "JARVIS sun raha hai... boliye!")
+                            await live_session.greet()
+                            continue
+                    # Cold path (same as before v3.0): connect now.
                     await send_ui_status(
-                        "listening", "JARVIS sun raha hai... boliye!")
-                except MayeraError as err:
-                    live_session = None
-                    in_call = False
-                    await send_ui_status("error", err.message)
-                except Exception as exc:  # noqa: BLE001
-                    live_session = None
-                    in_call = False
-                    _, friendly = friendly_error(exc)
-                    await send_ui_status("error", friendly)
+                        "connecting", "Gemini se connect ho raha hai...")
+                    try:
+                        if live_session is not None:
+                            try:
+                                await live_session.stop()
+                            except Exception:  # noqa: BLE001
+                                pass
+                            live_session = None
+                        live_session = _build_session()
+                        await live_session.start()
+                        mic_muted = False
+                        watcher.reset()
+                        await send_ui_status(
+                            "listening", "JARVIS sun raha hai... boliye!")
+                    except MayeraError as err:
+                        live_session = None
+                        in_call = False
+                        await send_ui_status("error", err.message)
+                    except Exception as exc:  # noqa: BLE001
+                        live_session = None
+                        in_call = False
+                        _, friendly = friendly_error(exc)
+                        await send_ui_status("error", friendly)
 
             elif ctype == "stop":
                 in_call = False
@@ -526,7 +551,16 @@ async def websocket_endpoint(ws: WebSocket):
     except WebSocketDisconnect:
         log.info("Browser disconnected.")
     except Exception as exc:  # noqa: BLE001
-        log.warning("WebSocket error: %s", exc.__class__.__name__)
+        # Starlette raises a DIFFERENT class, WebSocketDisconnected
+        # (a RuntimeError), when code touches a socket the browser
+        # already closed - a normal tab-close race, not a fault.
+        # It used to land here and look like an error in his log.
+        if exc.__class__.__name__ in ("WebSocketDisconnected",
+                                      "ClientDisconnected"):
+            log.info("Browser disconnected.")
+        else:
+            log.warning("WebSocket error: %s: %s",
+                        exc.__class__.__name__, exc)
     finally:
         await manager.unregister(ws)
 

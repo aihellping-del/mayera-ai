@@ -45,6 +45,10 @@ RECONNECT_BASE_DELAY = 1.0  # seconds, doubles every attempt
 # to the next candidate. Without it, a silently hanging model made
 # START TALKING take ~35 seconds (seen in the user's log, 2026-11-10).
 CONNECT_TIMEOUT_SECONDS = 10.0
+# During a RECONNECT the user is mid-conversation and waiting, so a
+# hanging candidate gets less time before we move on (v3.7): the
+# difference is exactly the 13s+ "jawab" delays in his log.
+RECONNECT_ATTEMPT_TIMEOUT = 4.0
 
 SYSTEM_INSTRUCTION = (
     "You are JARVIS, a calm, sharp and deeply caring male AI companion "
