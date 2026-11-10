@@ -187,6 +187,70 @@ _DO_CLICK_JS = """
 
 _READ_PAGE_JS = "document.body ? document.body.innerText : ''"
 
+# Form filling (v3.34): find a writable field by its human name -
+# the text of its <label>, its placeholder, aria-label or name -
+# the way a person would describe it ('email wala box').
+_FIND_FIELD_JS = """
+((query) => {
+  const norm = (s) => (s || '').toLowerCase().replace(/\\s+/g, ' ').trim();
+  const els = Array.from(document.querySelectorAll(
+    'input, textarea, [contenteditable="true"]'));
+  for (const el of els) {
+    const rects = el.getClientRects();
+    if (!rects || !rects.length) continue;
+    const type = (el.getAttribute('type') || 'text').toLowerCase();
+    if (['hidden', 'submit', 'button', 'checkbox', 'radio',
+         'file', 'password'].includes(type)) continue;
+    let labelText = '';
+    if (el.id) {
+      const lab = document.querySelector('label[for="' + el.id + '"]');
+      if (lab) labelText = lab.innerText;
+    }
+    if (!labelText) {
+      const wrap = el.closest('label');
+      if (wrap) labelText = wrap.innerText;
+    }
+    const cand = norm([labelText, el.getAttribute('placeholder'),
+      el.getAttribute('aria-label'), el.getAttribute('name')]
+      .filter(Boolean).join(' '));
+    if (cand && cand.includes(query)) {
+      document.querySelectorAll('[data-jarvis-field]').forEach(
+        e => e.removeAttribute('data-jarvis-field'));
+      el.setAttribute('data-jarvis-field', '1');
+      el.scrollIntoView({block: 'center'});
+      const r = el.getBoundingClientRect();
+      const sx = Math.round(window.screenX + r.left + r.width / 2);
+      const sy = Math.round(window.screenY
+        + (window.outerHeight - window.innerHeight)
+        + r.top + r.height / 2);
+      return {found: true, point: [sx, sy],
+              label: (el.getAttribute('placeholder')
+                      || el.getAttribute('name')
+                      || 'field').slice(0, 80)};
+    }
+  }
+  return {found: false};
+})(%s)
+"""
+
+_FOCUS_FIELD_JS = """
+(() => {
+  const el = document.querySelector('[data-jarvis-field="1"]');
+  if (!el) return {focused: false};
+  el.focus();
+  el.click();
+  return {focused: true};
+})()
+"""
+
+_FIELD_VALUE_JS = """
+(() => {
+  const el = document.querySelector('[data-jarvis-field="1"]');
+  if (!el) return '';
+  return (el.value !== undefined ? el.value : el.innerText) || '';
+})()
+"""
+
 
 class _CdpPage:
     """One browser tab driven over the DevTools Protocol."""
@@ -604,6 +668,42 @@ class BrowserAgent:
         await asyncio.sleep(0.8)
         new_title = await page.eval("document.title") or ""
         return {"status": "done", "clicked": label, "page_now": new_title,
+                "point": found.get("point")}
+
+    async def type_in_field(self, field, text):
+        """Fill ONE form field in JARVIS's own browser (v3.34):
+        find it by its label/placeholder/name, focus it, insert
+        the text at CDP level (Hindi-safe), then READ THE VALUE
+        BACK - 'done' is claimed only when the text is really in
+        the box. Typing is not submitting: pressing the form's
+        submit/send button stays a separate browser_click, whose
+        risky-label gate applies as before. Password fields are
+        excluded by the finder - JARVIS never types passwords."""
+        query = _norm_text(field)
+        if not query:
+            return {"status": "error",
+                    "message": "kis box me likhna hai, ye nahi bataya"}
+        if not text:
+            return {"status": "error", "message": "kya likhna hai, ye khaali hai"}
+        page = await self._ensure_page()
+        found = await page.eval(_FIND_FIELD_JS % json.dumps(query)) or {}
+        if not found.get("found"):
+            return {"status": "error",
+                    "message": f"'{field}' naam ka koi likhne wala "
+                               "box is page par nahi dikha"}
+        foc = await page.eval(_FOCUS_FIELD_JS) or {}
+        if not foc.get("focused"):
+            return {"status": "error",
+                    "message": "box mila par usme cursor nahi gaya"}
+        await page.call("Input.insertText", text=text)
+        await asyncio.sleep(0.2)
+        value = await page.eval(_FIELD_VALUE_JS) or ""
+        if text not in value and not value.startswith(text[:20]):
+            return {"status": "error",
+                    "message": "box me text gaya hi nahi - page ne "
+                               "rok diya hoga"}
+        return {"status": "done", "field": found.get("label") or field,
+                "typed": text[:60], "verified": True,
                 "point": found.get("point")}
 
     async def back(self):

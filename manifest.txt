@@ -59,3 +59,4 @@ actions/whatsapp.py
 actions/whatsapp_desktop.py
 checksums.txt
 actions/command_runner.py
+core/activity_log.py

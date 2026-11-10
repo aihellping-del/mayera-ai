@@ -46,6 +46,7 @@ TOOL_TIMEOUTS = {
     "look_at_screen": 45,
 }
 DEFAULT_TOOL_TIMEOUT = 45
+from core.activity_log import log_tool as _log_tool
 from core.audio_utils import ensure_bytes
 from core.errors import MayeraError, friendly_error
 
@@ -851,6 +852,7 @@ class GeminiLiveSession:
         "browser_close_tab": "Tab band kar raha hai...",
         "run_command": "Command chalane se pehle card dikha raha hai...",
         "run_python": "Python chalane se pehle card dikha raha hai...",
+        "browser_type": "Browser me form bhar raha hai...",
     }
 
     def _spawn_tool_calls(self, function_calls):
@@ -905,6 +907,7 @@ class GeminiLiveSession:
         _status = (result or {}).get("status", "?")
         print(f"  [tool] {call.name} -> {_status} ({_dt:.1f}s)",
               flush=True)
+        _log_tool(call.name, _status, _dt)  # v3.34 activity log
         if _status == "typed":
             print(f"  [tool] type_text typed "
                   f"{(result or {}).get('chars', 0)} chars", flush=True)

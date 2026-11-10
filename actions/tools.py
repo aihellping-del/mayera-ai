@@ -727,6 +727,28 @@ def function_declarations():
                 required=["code"]),
         ),
         types.FunctionDeclaration(
+            name="browser_type",
+            description=(
+                "Type text into ONE form field on the page open in "
+                "your own browser: find the field by its label or "
+                "placeholder ('email', 'naam', 'search'), type the "
+                "text and verify it landed. This only FILLS the "
+                "box - submitting stays a separate browser_click "
+                "(whose permission card applies to risky buttons). "
+                "Password fields are never filled."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "field": types.Schema(
+                        type=types.Type.STRING,
+                        description="The field's label/placeholder/name as seen on the page."),
+                    "text": types.Schema(
+                        type=types.Type.STRING,
+                        description="The exact text to type into it.")},
+                required=["field", "text"]),
+        ),
+        types.FunctionDeclaration(
             name="browser_close_tab",
             description=(
                 "Close ONLY the current tab in JARVIS's own "
@@ -820,7 +842,7 @@ _FILE_TOOLS = {"list_files", "create_folder", "create_file",
                "rename_file", "trash_file", "find_files"}
 
 # v3.20: JARVIS's own personal browser
-_BROWSER_TOOLS = {"browser_search", "browser_research",
+_BROWSER_TOOLS = {"browser_search", "browser_research", "browser_type",
                   "browser_open_result", "browser_click",
                   "browser_read_page", "browser_back",
                   "browser_close_tab"}
@@ -1090,6 +1112,22 @@ class ToolExecutor:
             return await b.back()
         if name == "browser_close_tab":
             return await b.close_current_tab()
+        if name == "browser_type":
+            result = await b.type_in_field(args.get("field", ""),
+                                           args.get("text", ""))
+            # Same visible-arrow glide as clicks (v3.24): he sees
+            # WHERE JARVIS is typing.
+            point = (result.get("point")
+                     if isinstance(result, dict) else None)
+            if (result.get("status") == "done" and point
+                    and self._pc is not None):
+                try:
+                    await asyncio.to_thread(
+                        self._pc.glide_to,
+                        int(point[0]), int(point[1]))
+                except Exception:  # noqa: BLE001
+                    pass
+            return result
         # browser_click: risky labels go through the same Haan/Nahi
         # gate as file trashing (v3.17) - the gate blocks on a
         # thread, so wrap it for the agent's async confirm callback.

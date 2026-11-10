@@ -1297,3 +1297,42 @@ generation time - the split metrics now prove which part is
 which on his own terminal.
 Tests: 13/13 new (~/workspace/test_perf_emergency.py) + every
 regression suite + Node 11/11 + smoke with new /health fields.
+
+--- v3.34.0 addendum (2026-11-10): AUTOMATION INTEGRATION ---
+User's spec asked to integrate PyAutoGUI, Playwright MCP,
+Browser Use and Open Interpreter. Audit verdicts, honestly:
+* PyAutoGUI - ALREADY INTEGRATED since v3.13 (requirements.txt
+  + pc_control hotkey/click/scroll paths with ctypes fallback;
+  he installed it 2026-11-10). Nothing to add.
+* Playwright MCP - NOT integrated as a stack: it needs a Node
+  runtime + its own Chromium download and would duplicate the
+  CDP browser (v3.20) that already searches/opens/clicks/reads/
+  manages tabs at zero install cost on his 12 GB laptop. Its
+  one real gap in JARVIS was FORM FILLING - built natively
+  here as browser_type (48 declarations): find a field by
+  label/placeholder/name, focus, CDP insertText (Hindi-safe),
+  read the value back before claiming done; the user's arrow
+  glides to the field; password fields are excluded by design;
+  submitting remains a separate gated browser_click.
+* Browser Use - NOT integrated: a heavy autonomous-agent
+  framework (own Playwright/Chromium + a second LLM loop) whose
+  unsupervised multi-step clicking contradicts his confirm-gate
+  rulebook; the decomposition role is already played by the
+  Live model over sequential tools.
+* Open Interpreter - NOT integrated as a package: its ability
+  (LLM writes + runs code) already exists in SAFER form since
+  v3.32 (run_python/run_command behind the always-on card +
+  denylist); the package would add a second, less-gated code
+  execution path plus heavy deps.
+Also built from his spec §8: a persistent ACTIVITY LOG
+(core/activity_log.py -> activity.log beside the program):
+one JSON line per finished tool (time, tool, status, seconds)
+- arguments/results deliberately never logged (they can hold
+private dictated content); self-trims at 512 KB; wired into
+_run_one_tool. His 'Automation Manager' (§5) is the existing
+ToolExecutor + model tool-choice; Start/Stop controls already
+exist (START TALKING, STOP voice command, Ctrl+Shift+Q).
+Tests: 8/8 new (~/workspace/test_automation_integration.py:
+field fill+verify, unknown-field honesty, executor routing,
+48 declarations, log content/privacy/trim, PyAutoGUI shipped)
++ every regression suite + Node + smoke.
