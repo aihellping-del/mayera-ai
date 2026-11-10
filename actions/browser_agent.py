@@ -6,7 +6,9 @@ asked for a browser of JARVIS's own: 'mai jo bolu usko research
 karega, or jisko bhi bolu usko click bhi kare' - research what he
 says, and click what he names.
 
-Design: launch Chrome or Edge (whichever the PC has) with a
+Design: launch Chrome (v3.30: Chrome ONLY, by the user's clear
+order - earlier Chrome-or-Edge fallback opened Edge for his
+searches while his Chrome sat elsewhere on disk) with a
 dedicated profile folder (~/.jarvis_browser - JARVIS's own,
 separate from the user's personal browser and its logins) and
 drive it over the Chrome DevTools Protocol on localhost:9333,
@@ -54,17 +56,51 @@ RISKY_CLICK_WORDS = (
 )
 
 
+def _chrome_from_registry():
+    """Chrome's real path from the Windows App Paths registry -
+    the same place `start chrome` looks. Finds installs that do
+    not live in the standard folders (other drives, custom
+    setups), which the file search below can miss (v3.30: on the
+    user's PC the file search missed his Chrome and the agent
+    silently fell back to Edge - exactly what he reported)."""
+    try:
+        import winreg
+    except ImportError:
+        return None
+    keys = [
+        (winreg.HKEY_LOCAL_MACHINE,
+         r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe"),
+        (winreg.HKEY_CURRENT_USER,
+         r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe"),
+        (winreg.HKEY_LOCAL_MACHINE,
+         r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe"),
+    ]
+    for hive, subkey in keys:
+        try:
+            with winreg.OpenKey(hive, subkey) as key:
+                value, _ = winreg.QueryValueEx(key, None)
+            if value and Path(value).is_file():
+                return str(value)
+        except OSError:
+            continue
+    return None
+
+
 def _find_browser():
-    """Chrome first, Edge second (same policy as the UI window)."""
+    """CHROME ONLY (v3.30, user's clear order: 'bas Chrome hi
+    use kare'). Registry first, then the standard folders, then
+    PATH. No Edge fallback - if Chrome is not found the caller
+    says so honestly instead of opening the wrong browser."""
     if not sys.platform.startswith("win"):
         return None
+    found = _chrome_from_registry()
+    if found:
+        return found
     env = os.environ
     candidates = [
         Path(env.get("ProgramFiles", "")) / "Google/Chrome/Application/chrome.exe",
         Path(env.get("ProgramFiles(x86)", "")) / "Google/Chrome/Application/chrome.exe",
         Path(env.get("LOCALAPPDATA", "")) / "Google/Chrome/Application/chrome.exe",
-        Path(env.get("ProgramFiles(x86)", "")) / "Microsoft/Edge/Application/msedge.exe",
-        Path(env.get("ProgramFiles", "")) / "Microsoft/Edge/Application/msedge.exe",
     ]
     for path in candidates:
         try:
@@ -72,7 +108,7 @@ def _find_browser():
                 return str(path)
         except OSError:
             continue
-    return shutil.which("chrome") or shutil.which("msedge")
+    return shutil.which("chrome")
 
 
 def _norm_text(text):
@@ -333,7 +369,8 @@ class BrowserAgent:
             return self._page
         exe = self._finder()
         if not exe:
-            raise RuntimeError("Chrome ya Edge nahi mila is PC par")
+            raise RuntimeError("Chrome nahi mila is PC par - JARVIS "
+                               "ka browser sirf Chrome use karta hai")
         self._profile.mkdir(parents=True, exist_ok=True)
         self._popen(
             [exe, f"--remote-debugging-port={self._port}",

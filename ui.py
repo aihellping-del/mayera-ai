@@ -6,8 +6,8 @@ address as before (/static/...) so saved pages and links keep
 working - only the folder on disk changed its name.
 
 Opening (v3.18, user's ask): the UI no longer opens as a tab in
-his everyday browser. On Windows it launches Chrome or Edge in
---app mode - JARVIS gets its OWN window (no tabs, no address bar,
+his everyday browser. On Windows it launches Chrome in
+--app mode (v3.30: Chrome only, per his order) - JARVIS gets its OWN window (no tabs, no address bar,
 its own taskbar button), like a small dashboard app. It is still
 the same page underneath, so the mic permission and device choices
 saved in that browser carry over. MAYERA_NO_APP_UI=1 forces the
@@ -34,34 +34,58 @@ def mount_dashboard(app):
     return app
 
 
+def _chrome_from_registry():
+    """Chrome's real path from the Windows App Paths registry
+    (the same place `start chrome` looks) - finds installs
+    outside the standard folders (v3.30)."""
+    try:
+        import winreg
+    except ImportError:
+        return None
+    keys = [
+        (winreg.HKEY_LOCAL_MACHINE,
+         r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe"),
+        (winreg.HKEY_CURRENT_USER,
+         r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe"),
+        (winreg.HKEY_LOCAL_MACHINE,
+         r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe"),
+    ]
+    for hive, subkey in keys:
+        try:
+            with winreg.OpenKey(hive, subkey) as key:
+                value, _ = winreg.QueryValueEx(key, None)
+            if value and Path(value).is_file():
+                return str(value)
+        except OSError:
+            continue
+    return None
+
+
 def _app_browser():
-    """Find a Chromium browser for --app mode: (name, exe) or
-    (None, None). Chrome first, then Edge (every Windows 11 PC has
-    Edge, so this almost always succeeds)."""
+    """Find Chrome for --app mode: ('chrome', exe) or (None, None).
+    CHROME ONLY (v3.30, user's order: 'bas Chrome hi use kare') -
+    no Edge fallback; when Chrome is missing the caller falls
+    back to a normal browser tab instead."""
     if not sys.platform.startswith("win"):
         return None, None
+    found = _chrome_from_registry()
+    if found:
+        return "chrome", found
     env = os.environ
-    candidates = [
-        ("chrome", "chrome", [
-            Path(env.get("ProgramFiles", "")) / "Google/Chrome/Application/chrome.exe",
-            Path(env.get("ProgramFiles(x86)", "")) / "Google/Chrome/Application/chrome.exe",
-            Path(env.get("LOCALAPPDATA", "")) / "Google/Chrome/Application/chrome.exe",
-        ]),
-        ("edge", "msedge", [
-            Path(env.get("ProgramFiles(x86)", "")) / "Microsoft/Edge/Application/msedge.exe",
-            Path(env.get("ProgramFiles", "")) / "Microsoft/Edge/Application/msedge.exe",
-        ]),
+    paths = [
+        Path(env.get("ProgramFiles", "")) / "Google/Chrome/Application/chrome.exe",
+        Path(env.get("ProgramFiles(x86)", "")) / "Google/Chrome/Application/chrome.exe",
+        Path(env.get("LOCALAPPDATA", "")) / "Google/Chrome/Application/chrome.exe",
     ]
-    for name, which_name, paths in candidates:
-        for path in paths:
-            try:
-                if path.is_file():
-                    return name, str(path)
-            except OSError:
-                continue
-        found = shutil.which(which_name)
-        if found:
-            return name, found
+    for path in paths:
+        try:
+            if path.is_file():
+                return "chrome", str(path)
+        except OSError:
+            continue
+    found = shutil.which("chrome")
+    if found:
+        return "chrome", found
     return None, None
 
 

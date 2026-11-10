@@ -1157,3 +1157,23 @@ explanation with the hotkey/earphone advice.
 Tests: 13/13 new (~/workspace/test_hud_window.py) + ALL
 regressions (test_speed_round4's two cushion expectations
 updated to the v3.28 values 110/60) + Node 11/11 + smoke.
+
+--- v3.30.0 addendum (2026-11-10): CHROME ONLY ---
+User: 'Chrome kholne bolta hu tab kholta hai, search karne
+bolta hu tab Microsoft Edge wala khulta hai - mai chahta hu bas
+Chrome hi use kare.' Root cause: BrowserAgent._find_browser
+searched only the standard folders + PATH; his Chrome is
+registered in Windows' App Paths (which is why `start chrome`
+works) but lives outside those folders, so the search missed
+it and the Edge fallback silently took over. Fixes: both
+finders (actions/browser_agent.py and ui.py) now look up the
+App Paths registry first (HKLM, HKCU, WOW6432Node - the same
+place Windows itself looks), then the standard folders, then
+PATH; and the Edge fallback is REMOVED from both - Chrome
+missing now reports honestly ('Chrome nahi mila - JARVIS ka
+browser sirf Chrome use karta hai') or falls back to a plain
+tab for the UI window, never Edge.
+Tests: 5/5 new (~/workspace/test_chrome_only.py - msedge absent
+from both finders, fake-winreg registry hit for both modules,
+missing winreg degrades to None) + browser/app-window/HUD/
+WhatsApp regressions + server smoke.
