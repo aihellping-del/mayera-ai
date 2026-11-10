@@ -125,7 +125,14 @@ _FIND_CLICKABLE_JS = """
         e => e.removeAttribute('data-jarvis-click'));
       el.setAttribute('data-jarvis-click', '1');
       el.scrollIntoView({block: 'center'});
-      return {found: true, label: label.slice(0, 120)};
+      const r = el.getBoundingClientRect();
+      // Where the element sits on the real screen, so the user's
+      // own mouse arrow can glide there visibly (v3.24).
+      const sx = Math.round(window.screenX + r.left + r.width / 2);
+      const sy = Math.round(window.screenY
+        + (window.outerHeight - window.innerHeight)
+        + r.top + r.height / 2);
+      return {found: true, label: label.slice(0, 120), point: [sx, sy]};
     }
   }
   return {found: false};
@@ -205,15 +212,27 @@ class _CdpPage:
 
     async def navigate(self, url):
         await self.call("Page.navigate", url=url)
-        # Wait until the page has really loaded (max ~6 s).
-        deadline = time.monotonic() + 6.0
+        # Wait until the page is usable (max ~4.5 s): readyState
+        # interactive/complete, OR real content already on screen -
+        # ad/tracker-heavy pages can sit at 'loading' long after
+        # the article is readable, and research speed matters.
+        deadline = time.monotonic() + 4.5
         while time.monotonic() < deadline:
             try:
-                state = await self.eval("document.readyState")
+                state = await self.eval(
+                    "document.readyState + '|' + "
+                    "(document.body ? document.body.innerText.length : 0)")
             except Exception:  # noqa: BLE001
                 state = None
-            if state in ("complete", "interactive"):
-                return
+            if state:
+                ready, _, length = str(state).partition("|")
+                if ready in ("complete", "interactive"):
+                    return
+                try:
+                    if int(length) > 300:
+                        return
+                except ValueError:
+                    pass
             await asyncio.sleep(0.25)
 
     async def alive(self):
@@ -319,7 +338,7 @@ class BrowserAgent:
         return {"status": "done", "opened": title,
                 "url": target["url"]}
 
-    async def read_page(self, limit=2600):
+    async def read_page(self, limit=1800):
         page = await self._ensure_page()
         text = await page.eval(_READ_PAGE_JS) or ""
         text = "\n".join(line.strip() for line in str(text).splitlines()
@@ -377,7 +396,8 @@ class BrowserAgent:
             return {"status": "error", "message": "button mila par click nahi ho paya"}
         await asyncio.sleep(0.8)
         new_title = await page.eval("document.title") or ""
-        return {"status": "done", "clicked": label, "page_now": new_title}
+        return {"status": "done", "clicked": label, "page_now": new_title,
+                "point": found.get("point")}
 
     async def back(self):
         page = await self._ensure_page()

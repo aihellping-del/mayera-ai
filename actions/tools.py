@@ -957,8 +957,19 @@ class ToolExecutor:
                 return False
             return await asyncio.to_thread(self._confirm.ask, question)
 
-        return await b.click_text(args.get("text", ""),
-                                  confirm=_confirm_cb)
+        result = await b.click_text(args.get("text", ""),
+                                    confirm=_confirm_cb)
+        # v3.24: glide the user's real arrow to the clicked element
+        # so he SEES where JARVIS pressed (the DOM click itself is
+        # invisible). Best-effort - never fails the click.
+        point = result.get("point") if isinstance(result, dict) else None
+        if result.get("status") == "done" and point and self._pc is not None:
+            try:
+                await asyncio.to_thread(
+                    self._pc.glide_to, int(point[0]), int(point[1]))
+            except Exception:  # noqa: BLE001
+                pass
+        return result
 
     async def _v317(self, name, args):
         """v3.17 port pack routing: file kaam, weather, reminders,

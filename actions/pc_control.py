@@ -425,6 +425,41 @@ def _default_title_focuser(title_part, timeout):
     return False
 
 
+def _default_setpos(x, y):
+    """Move the visible arrow cursor to (x, y), nothing else."""
+    try:
+        import ctypes
+        ctypes.windll.user32.SetCursorPos(int(x), int(y))
+    except Exception:  # noqa: BLE001 - non-Windows / no desktop
+        pass
+
+
+def _default_position():
+    """Current cursor (x, y), or None when it cannot be read."""
+    try:
+        import ctypes
+
+        class _Point(ctypes.Structure):
+            _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+        pt = _Point()
+        if ctypes.windll.user32.GetCursorPos(ctypes.byref(pt)):
+            return pt.x, pt.y
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _default_screen_size():
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        return (int(user32.GetSystemMetrics(0)) or 1920,
+                int(user32.GetSystemMetrics(1)) or 1080)
+    except Exception:  # noqa: BLE001
+        return 1920, 1080
+
+
 def _default_clicker_at(x, y, button, double):
     """Move to absolute (x, y) and click there (v3.13 click tool)."""
     import ctypes
@@ -517,7 +552,8 @@ class PcController:
                  mover=None, clicker=None, scroller=None, keyer=None,
                  focuser=None, sleeper=None, bytes_capturer=None,
                  title_focuser=None, clicker_at=None,
-                 dialog_dismisser=None):
+                 dialog_dismisser=None, setpos=None, positioner=None,
+                 sizer=None):
         self._win = (sys.platform.startswith("win")
                      if is_windows is None else is_windows)
         self._runner = runner or _default_runner
@@ -539,6 +575,9 @@ class PcController:
         self._clicker_at = clicker_at or _default_clicker_at
         self._dialog_dismisser = (dialog_dismisser
                                   or _default_dialog_dismisser)
+        self._setpos = setpos or _default_setpos
+        self._positioner = positioner or _default_position
+        self._sizer = sizer or _default_screen_size
         self._last_open = None  # (process image, monotonic time)
         # pyautogui FAILSAFE (v3.13, user's spec): slamming the mouse
         # into a screen corner aborts pyautogui actions. Best-effort -
@@ -737,9 +776,61 @@ class PcController:
             amount = max(1, min(20, int(amount)))
         except (TypeError, ValueError):
             amount = 3
+        # v3.24: the wheel goes to whichever window sits UNDER the
+        # cursor - parked over the JARVIS window or taskbar, the
+        # scroll silently landed nowhere ('bol dega, hoga nahi').
+        # Glide the arrow to the screen centre first (the content
+        # area of a maximised window), THEN scroll.
+        self._glide_to_center()
         self._scroller(direction, amount)
         return {"status": "scrolled", "direction": direction,
                 "amount": amount}
+
+    def _glide_to(self, x, y):
+        """Move the VISIBLE arrow to (x, y) like a hand would -
+        smoothly, over ~0.45 s (v3.24, user's ask: he wants to SEE
+        his chhota sa tir travel to the thing being clicked).
+        Best-effort: any failure just lands the cursor there."""
+        try:
+            start = self._positioner()
+            if not start:
+                self._setpos(x, y)
+                return
+            steps = 14
+            sx, sy = start
+            for i in range(1, steps + 1):
+                t = i / steps
+                ease = 1 - (1 - t) ** 2  # fast start, soft landing
+                self._setpos(int(sx + (x - sx) * ease),
+                             int(sy + (y - sy) * ease))
+                if i < steps:
+                    self._sleep(0.03)
+            self._setpos(x, y)
+        except Exception:  # noqa: BLE001 - never break the action
+            try:
+                self._setpos(x, y)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _glide_to_center(self):
+        try:
+            width, height = self._sizer()
+            self._glide_to(width // 2, height // 2)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def glide_to(self, x, y):
+        """Public glide (no click) - e.g. after a browser DOM click,
+        so the user sees his arrow travel to what JARVIS pressed."""
+        blocked = self._guard()
+        if blocked:
+            return blocked
+        try:
+            x, y = int(x), int(y)
+        except (TypeError, ValueError):
+            return {"status": "error", "message": "x, y number hone chahiye"}
+        self._glide_to(x, y)
+        return {"status": "ok", "x": x, "y": y}
 
     def click(self, x, y, button="left", double=False):
         """Move to absolute screen point (x, y) and click there
@@ -757,6 +848,9 @@ class PcController:
         button = (button or "left").strip().lower()
         if button not in ("left", "right"):
             return {"status": "error", "message": "button left/right ho"}
+        # v3.24: the arrow visibly glides to the target first, so
+        # the user watches it travel and land - then the click.
+        self._glide_to(x, y)
         self._clicker_at(x, y, button, bool(double))
         return {"status": "clicked", "x": x, "y": y,
                 "button": button, "double": bool(double)}

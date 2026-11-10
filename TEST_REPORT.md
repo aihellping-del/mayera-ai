@@ -1012,3 +1012,29 @@ resume from where he stopped instead of repeating.
 Tests: 13/13 new (~/workspace/test_noise_gate.py - gate truth
 table incl. window edges and loud barge-in) + regressions
 12/14/13/49 + server smoke.
+
+--- v3.24.0 addendum (2026-11-10): THE VISIBLE ARROW + REAL
+SCROLL + FASTER RESEARCH ---
+User, three asks in one: (1) Chrome research still slow;
+(2) 'scroll bolta hu, bol dega par hoga nahi' - scroll claimed
+but never happened; (3) JARVIS must use HIS mouse arrow (the
+small tir) visibly for clicking.
+Root causes found in code: the wheel event goes to the window
+UNDER the cursor - parked over the JARVIS window/taskbar it
+scrolled nothing while reporting success; clicks teleported the
+cursor instantly (SetCursorPos) so he never saw it move; the
+browser's DOM clicks were fully invisible; research waits paid
+full page-load times on tracker-heavy pages.
+Fixes: PcController._glide_to - the arrow now travels smoothly
+(~0.45 s, ease-out, 14 steps) to every click target before the
+click fires; mouse_scroll/scroll glide the arrow to the screen
+centre (content area) BEFORE wheeling, so the scroll lands in
+the window he is looking at; browser_click's finder now also
+returns the element's on-screen point and the executor glides
+his real arrow there after the DOM click; CDP navigate returns
+as soon as the page is usable (readyState interactive OR >300
+chars of body text; cap 4.5 s) and read_page's default payload
+trimmed 2600 -> 1800 chars for a faster spoken summary.
+Tests: 11/11 new (~/workspace/test_visible_mouse.py - glide path
+shape + ordering, centre-before-wheel for both scroll tools,
+browser point glide) + every regression + server smoke.
