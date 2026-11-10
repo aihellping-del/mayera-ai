@@ -27,7 +27,7 @@ _UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
 
 def _default_fetcher(url):
     req = urllib.request.Request(url, headers={"User-Agent": _UA})
-    with urllib.request.urlopen(req, timeout=10) as resp:
+    with urllib.request.urlopen(req, timeout=5) as resp:
         return resp.read().decode("utf-8", errors="replace")
 
 
@@ -65,13 +65,21 @@ class YoutubePlayer:
     def __init__(self, opener=None, fetcher=None):
         self._opener = opener or webbrowser.open
         self._fetcher = fetcher
+        self._cache = {}  # query -> results: "list sunao" ke baad
+        # "dusri wali chalao" par dobara net nahi lagta (v3.5 speed)
+
+    def _videos(self, query):
+        key = query.lower()
+        if key not in self._cache:
+            self._cache[key] = search_videos(query, fetcher=self._fetcher)
+        return self._cache[key]
 
     def search(self, query):
         query = (query or "").strip()
         if not query:
             return {"status": "error", "message": "khaali search"}
         try:
-            videos = search_videos(query, fetcher=self._fetcher)
+            videos = self._videos(query)
         except Exception as exc:  # noqa: BLE001 - network, markup, ...
             return {"status": "error",
                     "message": f"YouTube search nahi ho paya: {exc}"}
@@ -91,7 +99,7 @@ class YoutubePlayer:
         except (TypeError, ValueError):
             number = 1
         try:
-            videos = search_videos(query, fetcher=self._fetcher)
+            videos = self._videos(query)
         except Exception as exc:  # noqa: BLE001
             return {"status": "error",
                     "message": f"YouTube search nahi ho paya: {exc}"}

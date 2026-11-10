@@ -206,7 +206,7 @@ class GeminiLiveSession:
             speed = self._store.get_setting("reply_speed", "fast")
         if speed == "patient":
             return (types.EndSensitivity.END_SENSITIVITY_LOW, 300, 900)
-        return (types.EndSensitivity.END_SENSITIVITY_HIGH, 200, 350)
+        return (types.EndSensitivity.END_SENSITIVITY_HIGH, 120, 250)
 
     def _web_search_enabled(self):
         return (self._store is not None
@@ -484,7 +484,11 @@ class GeminiLiveSession:
             return
         responses = []
         for call in function_calls:
+            _t0 = time.monotonic()
             result = await self._tools.execute(call.name, dict(call.args or {}))
+            _dt = time.monotonic() - _t0
+            if _dt > 0.3:  # slow tool = slow reply; make it visible in the terminal
+                print(f"  [tool] {call.name}: {_dt:.1f}s", flush=True)
             kwargs = {"name": call.name, "response": result}
             if getattr(call, "id", None):
                 kwargs["id"] = call.id

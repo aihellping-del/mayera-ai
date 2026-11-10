@@ -66,7 +66,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-7s  %(name)s: %(message)s",
 )
-log = logging.getLogger("mayera")
+log = logging.getLogger("jarvis")
 
 manager = ConnectionManager()
 store = MemoryStore()
@@ -261,7 +261,7 @@ async def watchdog():
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    log.info("MAYERA server ready at http://%s:%s", config.HOST, config.PORT)
+    log.info("JARVIS server ready at http://%s:%s", config.HOST, config.PORT)
     task = asyncio.create_task(watchdog())
     yield
     task.cancel()
@@ -272,6 +272,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="JARVIS AI", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def _no_cache(request, call_next):
+    # After every auto-update the browser must load the FRESH page -
+    # a cached old page once kept showing the old name/design (v3.5).
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
@@ -590,7 +599,7 @@ def main():
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
     print()
     print("  ============================================")
-    print("   MAYERA AI - Voice Companion")
+    print("   JARVIS AI - Voice Companion")
     print(f"   Khul raha hai: {url}")
     print("   Band karne ke liye: Ctrl+C")
     print("  ============================================")

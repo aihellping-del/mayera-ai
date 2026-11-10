@@ -144,7 +144,7 @@ def main():
         remote_version = _fetch(
             "version.txt", token).decode("utf-8").strip()
     except Exception:
-        print("  (Update check nahi ho paya - MAYERA waise hi chalegi.)")
+        print("  (Update check nahi ho paya - JARVIS waise hi chalega.)")
         return 0
 
     local_version = _local_version()
@@ -179,7 +179,7 @@ def main():
                 remote_version + "\n", encoding="utf-8")
         print(f"  Update ho gaya! JARVIS ab v{remote_version} hai.")
     except Exception:
-        print("  (Update beech me ruk gaya - purani MAYERA hi chalegi. "
+        print("  (Update beech me ruk gaya - purana JARVIS hi chalega. "
               "Agli baar phir try hogi.)")
     return 0
 

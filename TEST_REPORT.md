@@ -353,3 +353,22 @@ plays, and "dusri wali" picks result 2. Failures (network/markup)
 return clean errors. 24/24 tests pass (fake OS layer, fake results
 page with dedupe/title-cleaning, executor routing for all 6 new
 tools; 15 declarations total) + app wiring and /health verified.
+
+--- v3.5.0 addendum (2026-11-10): NAME FULLY JARVIS + SPEED, ROUND 3 ---
+User's own terminal screenshot (first real latency data!): connect
+1.2s via pre-warm; per-reply latency 1.36-18.59s, avg ~7.2s over 8
+replies - fast plain replies vs slow tool/network turns. He also
+caught leftover MAYERA branding (Settings drawer, page defaults,
+terminal logger/banner) and demanded "MAYERA ka kuch nahi hona
+chahiye". Fixes: index.html defaults/hint/drawer -> JARVIS; logger
+renamed mayera->jarvis; startup banner + server-ready line -> JARVIS;
+updater fallback prints -> JARVIS; new START_JARVIS.bat (old .bat can
+be deleted by him; folder rename is safe - everything is relative);
+Cache-Control: no-store on all responses so a stale cached page can
+never show the old name again; inline SVG favicon (kills 404 noise).
+Speed: fast-mode VAD silence 350->250ms, prefix 200->120ms; YouTube
+results cached per query (list -> "dusri wali" no longer refetches);
+YouTube fetch timeout 10s->5s; slow tools now print "[tool] <name>:
+X.Xs" in the terminal so the next screenshot shows WHICH step was
+slow. Checks: logger name, turbo VAD values, cache single-fetch,
+served page contains zero "MAYERA", /health - all pass.
