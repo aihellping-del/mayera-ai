@@ -324,3 +324,18 @@ session's instruction ("PICHHLI BAAT KA HAAL...") so she opens with
 care. Tests: detect_mood 7/7, injection fresh/stale/wording pass,
 on_user_text stores mood; regressions 15/15 behaviour, thinking
 watchdog 2/2, PC tools 20/20.
+
+--- v3.3.0 addendum (2026-11-10): RENAMED TO JARVIS + MALE VOICE ---
+User asked: "Mayera naam hata kar JARVIS rakh do aur boy voice me
+baat kare." Display name changed everywhere the user sees it: system
+instruction identity (male companion, "Golu's trusted dost"), UI
+title/logo letter J/status texts (male grammar: sun raha, bol raha,
+soch raha, band ho gaya), terminal + updater prints, error messages,
+key pop-up, .bat titles/echoes, screenshot file prefix. Voice:
+Aoede (female) -> Charon (deep male, JARVIS-like). The v3.2 SAMAJH
+understanding + SMOOTH flow kept, reworded for a wise dost instead
+of a woman. NOT renamed (on purpose, to protect him): the install
+folder, START_MAYERA.bat filename, mayera_memory.db, key.dat, env
+var names and the GitHub repo - so his key, memories and auto-update
+keep working untouched. Checks: instruction/voice asserts, /health,
+JARVIS UI served, mood detection, PC-control spot checks - all pass.

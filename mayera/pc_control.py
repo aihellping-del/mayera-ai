@@ -168,7 +168,7 @@ class PcController:
         if image is None:
             return {"status": "error",
                     "message": f"'{app}' ko band karna meri list me nahi "
-                               "hai (Explorer aur MAYERA khud kabhi band "
+                               "hai (Explorer aur JARVIS khud kabhi band "
                                "nahi hote)."}
         self._runner(["taskkill", "/IM", image, "/F"])
         return {"status": "closed", "app": app}
@@ -208,7 +208,7 @@ class PcController:
         if not folder.is_dir():
             folder = self._home
         stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        path = folder / f"MAYERA-screenshot-{stamp}.png"
+        path = folder / f"JARVIS-screenshot-{stamp}.png"
         self._shooter(str(path))
         try:
             self._opener(path.as_uri())

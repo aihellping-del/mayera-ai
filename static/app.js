@@ -78,7 +78,7 @@ function connectWS() {
   ws.onopen = () => {
     connDot.className = "conn-dot on";
     connText.textContent = "Online";
-    setState("idle", "MAYERA taiyaar hai");
+    setState("idle", "JARVIS taiyaar hai");
   };
   ws.onmessage = (ev) => {
     if (typeof ev.data === "string") {
@@ -195,7 +195,7 @@ function playAiAudio(arrayBuffer) {
   playHead = startAt + buffer.duration;
   scheduled.add(src);
   src.onended = () => scheduled.delete(src);
-  if (callActive) setState("speaking", "MAYERA bol rahi hai...");
+  if (callActive) setState("speaking", "JARVIS bol raha hai...");
 }
 
 function flushPlayback() {
@@ -219,7 +219,7 @@ function tick() {
   document.documentElement.style.setProperty("--mouth", mouth.toFixed(1) + "px");
   // If scheduled audio has run out, MAYERA finished speaking.
   if (speaking && playCtx && playCtx.currentTime > playHead + 0.05 && scheduled.size === 0) {
-    setState("listening", "MAYERA sun rahi hai...");
+    setState("listening", "JARVIS sun raha hai...");
   }
   requestAnimationFrame(tick);
 }
@@ -412,7 +412,7 @@ $("btnClearMem").addEventListener("click", async () => {
 
 $("btnExit").addEventListener("click", async () => {
   if (callActive) btnEnd.click();
-  setState("idle", "MAYERA band ho gayi. Dhanyavaad, Golu! 👋");
+  setState("idle", "JARVIS band ho gaya. Dhanyavaad, Golu! 👋");
   try { await fetch("/api/exit", { method: "POST" }); } catch {}
   connDot.className = "conn-dot err";
   connText.textContent = "Band";

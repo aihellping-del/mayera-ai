@@ -353,7 +353,7 @@ class GeminiLiveSession:
                 "Gemini se connect nahi ho paya. Internet check karke "
                 "dobara try karein.",
             )
-        await self._on_status("connected", "MAYERA connected hai.")
+        await self._on_status("connected", "JARVIS connected hai.")
         self._recv_task = asyncio.create_task(self._receive_loop())
 
     async def _reconnect(self):
@@ -373,7 +373,7 @@ class GeminiLiveSession:
                 await self._on_status("error", err.message)
                 return
             if ok and self._session is not None:
-                await self._on_status("connected", "MAYERA phir se connected hai.")
+                await self._on_status("connected", "JARVIS phir se connected hai.")
                 self._recv_task = asyncio.create_task(self._receive_loop())
                 return
             await asyncio.sleep(delay)
@@ -454,7 +454,7 @@ class GeminiLiveSession:
         if sc is not None and getattr(sc, "interrupted", False):
             self._out_buf = ""
             await self._on_interrupted()
-            await self._on_status("listening", "MAYERA sun rahi hai...")
+            await self._on_status("listening", "JARVIS sun raha hai...")
             return
 
         # --- session resumption bookkeeping ---

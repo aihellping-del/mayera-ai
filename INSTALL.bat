@@ -5,7 +5,7 @@ REM  Creates a private Python environment (.venv) for MAYERA and
 REM  installs everything from requirements.txt into it. Your system
 REM  Python is not touched.
 REM =====================================================================
-title MAYERA AI - Install
+title JARVIS AI - Install
 cd /d "%~dp0"
 
 where python >nul 2>nul
@@ -24,7 +24,7 @@ for /f "tokens=2" %%V in ('python --version 2^>^&1') do set PYVER=%%V
 echo  Python %PYVER% mila. 
 
 if not exist ".venv" (
-    echo  MAYERA ke liye alag environment banaya ja raha hai...
+    echo  JARVIS ke liye alag environment banaya ja raha hai...
     python -m venv .venv
     if %ERRORLEVEL% NEQ 0 (
         echo  [ERROR] venv nahi ban paya.
@@ -48,7 +48,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 echo.
 echo  ============================================================
-echo   Install ho gaya!  Ab START_MAYERA.bat dabakar MAYERA chalayein.
+echo   Install ho gaya!  Ab START_MAYERA.bat dabakar JARVIS chalayein.
 echo  ============================================================
 echo.
 pause

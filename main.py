@@ -187,7 +187,7 @@ async def on_ai_audio(pcm_bytes: bytes):
     voice_state["thinking_sent"] = False
     watcher.mark_activity()
     await manager.send_audio(pcm_bytes)
-    await send_ui_status("speaking", "MAYERA bol rahi hai...")
+    await send_ui_status("speaking", "JARVIS bol raha hai...")
 
 
 async def on_status(state: str, message: str):
@@ -216,7 +216,7 @@ async def on_user_text(text: str):
     if is_stop_command(text):
         log.info("STOP command heard - flushing playback.")
         await manager.send_interrupted()
-        await send_ui_status("listening", "MAYERA sun rahi hai...")
+        await send_ui_status("listening", "JARVIS sun raha hai...")
 
 
 async def on_ai_text(text: str):
@@ -245,7 +245,7 @@ async def watchdog():
                 and now - voice_state["last_ai"] > 1.5
                 and not voice_state["thinking_sent"]):
             voice_state["thinking_sent"] = True
-            await send_ui_status("thinking", "MAYERA soch rahi hai...")
+            await send_ui_status("thinking", "JARVIS soch raha hai...")
         # proactive check-in
         if watcher.should_nudge():
             cp = store.get_checkpoint() if store.memory_enabled() else None
@@ -270,7 +270,7 @@ async def lifespan(app: FastAPI):
         live_session = None
 
 
-app = FastAPI(title="MAYERA AI", lifespan=lifespan)
+app = FastAPI(title="JARVIS AI", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
@@ -410,7 +410,7 @@ async def websocket_endpoint(ws: WebSocket):
                         voice_state["talking"] = True
                         if live_session is not None:
                             await send_ui_status(
-                                "listening", "MAYERA sun rahi hai...")
+                                "listening", "JARVIS sun raha hai...")
                     voice_state["last_voice"] = now
                     watcher.mark_activity()
                 elif voice_state["talking"] and \
@@ -449,7 +449,7 @@ async def websocket_endpoint(ws: WebSocket):
                     watcher.reset()
                     voice_state["awaiting_reply"] = False
                     await send_ui_status(
-                        "listening", "MAYERA sun rahi hai... boliye!")
+                        "listening", "JARVIS sun raha hai... boliye!")
                     await live_session.greet()
                     continue
                 # Pre-warm still running: wait for it, then go warm.
@@ -466,7 +466,7 @@ async def websocket_endpoint(ws: WebSocket):
                         watcher.reset()
                         voice_state["awaiting_reply"] = False
                         await send_ui_status(
-                            "listening", "MAYERA sun rahi hai... boliye!")
+                            "listening", "JARVIS sun raha hai... boliye!")
                         await live_session.greet()
                         continue
                 # Cold path (same as before v3.0): connect now.
@@ -484,7 +484,7 @@ async def websocket_endpoint(ws: WebSocket):
                     mic_muted = False
                     watcher.reset()
                     await send_ui_status(
-                        "listening", "MAYERA sun rahi hai... boliye!")
+                        "listening", "JARVIS sun raha hai... boliye!")
                 except MayeraError as err:
                     live_session = None
                     in_call = False
@@ -507,7 +507,7 @@ async def websocket_endpoint(ws: WebSocket):
                 mic_muted = bool(control.get("muted", False))
                 await send_ui_status(
                     "muted" if mic_muted else "listening",
-                    "Mic band hai." if mic_muted else "MAYERA sun rahi hai...",
+                    "Mic band hai." if mic_muted else "JARVIS sun raha hai...",
                 )
 
             elif ctype == "ping":
@@ -565,7 +565,7 @@ def ensure_api_key():
         return
     if sys.stdin and sys.stdin.isatty():
         print()
-        print("  MAYERA ko Gemini API key chahiye (Google AI Studio se free milti hai).")
+        print("  JARVIS ko Gemini API key chahiye (Google AI Studio se free milti hai).")
         print("  Key yaha chipi hui rahegi - type/paste karke Enter dabayein.")
         print("  Ye key is PC par encrypted save ho jayegi - dobara nahi dalna padega.")
         key = getpass.getpass("  Gemini API Key: ").strip()

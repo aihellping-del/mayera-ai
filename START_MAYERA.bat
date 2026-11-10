@@ -9,7 +9,7 @@ REM     sirf aapke Windows account se khulegi, saaf text me kabhi nahi.
 REM   * Agli baar se key nahi dalna padega - MAYERA seedha chalegi.
 REM   * Key badalna ho to KEY_CHANGE.bat chalakar phir se start karein.
 REM =====================================================================
-title MAYERA AI - Voice Companion
+title JARVIS AI - Voice Companion
 cd /d "%~dp0"
 
 REM --- use the project virtual environment if it exists ----------------

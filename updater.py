@@ -151,7 +151,7 @@ def main():
     if _version_tuple(remote_version) <= _version_tuple(local_version):
         return 0  # already up to date - stay silent
 
-    print(f"  Naya MAYERA update mil gaya: v{remote_version} "
+    print(f"  Naya JARVIS update mil gaya: v{remote_version} "
           f"(aapke paas v{local_version} hai). Laga raha hu...")
     try:
         manifest = _fetch("manifest.txt", token).decode("utf-8")
@@ -177,7 +177,7 @@ def main():
                 dest.write_bytes((tmp / rel).read_bytes())
             (ROOT / "version.txt").write_text(
                 remote_version + "\n", encoding="utf-8")
-        print(f"  Update ho gaya! MAYERA ab v{remote_version} hai.")
+        print(f"  Update ho gaya! JARVIS ab v{remote_version} hai.")
     except Exception:
         print("  (Update beech me ruk gaya - purani MAYERA hi chalegi. "
               "Agli baar phir try hogi.)")

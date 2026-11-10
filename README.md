@@ -1,4 +1,4 @@
-# MAYERA AI — Advanced Gemini Live Voice Agent
+# JARVIS AI — Voice Companion (formerly MAYERA)
 
 **v2.0** — MAYERA is now a true companion, not just a voice pipe:
 

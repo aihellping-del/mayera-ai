@@ -33,7 +33,7 @@ def ask_key_gui():
     result = {"key": None}
     try:
         root = tk.Tk()
-        root.title("MAYERA - API Key")
+        root.title("JARVIS - API Key")
         root.resizable(False, False)
         root.attributes("-topmost", True)
 
@@ -42,7 +42,7 @@ def ask_key_gui():
 
         tk.Label(
             frame, justify="left", font=("Segoe UI", 10),
-            text=("MAYERA ko Gemini API key chahiye.\n"
+            text=("JARVIS ko Gemini API key chahiye.\n"
                   "Key neeche wale box me paste karein (Ctrl+V chalega),\n"
                   "phir SAVE dabayein. Key sirf is PC par save hogi.")
         ).pack(anchor="w")

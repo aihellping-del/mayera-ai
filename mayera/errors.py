@@ -37,14 +37,14 @@ def friendly_error(exc):
                                 "unsupported model"))
             or ("model" in low and "not" in low)):
         return ("model_error",
-                "Ye Gemini model ab uplabdh nahi hai. MAYERA doosra "
+                "Ye Gemini model ab uplabdh nahi hai. JARVIS doosra "
                 "model khud try karegi.")
 
     # --- Network ------------------------------------------------------------
     if any(s in low for s in ("connect", "network", "timeout", "dns",
                               "ssl", "unreachable", "reset by peer")):
         return ("network_error",
-                "Internet connection me dikkat hai. MAYERA dobara "
+                "Internet connection me dikkat hai. JARVIS dobara "
                 "connect karne ki koshish kar rahi hai...")
 
     # --- Quota ---------------------------------------------------------------
@@ -56,9 +56,9 @@ def friendly_error(exc):
     # --- WebSocket / session --------------------------------------------------
     if "websocket" in low or "1011" in low or "1006" in low:
         return ("session_error",
-                "Voice session toot gaya. MAYERA dobara connect "
+                "Voice session toot gaya. JARVIS dobara connect "
                 "kar rahi hai...")
 
     return ("unknown_error",
             "Kuch gadbad ho gayi (" + exc.__class__.__name__ + "). "
-            "MAYERA sambhalne ki koshish kar rahi hai...")
+            "JARVIS sambhalne ki koshish kar raha hai...")

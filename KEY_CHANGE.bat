@@ -5,7 +5,7 @@ REM  Ye sirf key.dat (encrypted key file) delete karta hai.
 REM  Agli baar START_MAYERA.bat chalane par nayi key maangi jayegi
 REM  aur wahi nayi key save ho jayegi. Yaadein (memory) safe rahengi.
 REM =====================================================================
-title MAYERA AI - Key Change
+title JARVIS AI - Key Change
 cd /d "%~dp0"
 
 if exist "key.dat" (

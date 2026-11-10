@@ -1,3 +1,3 @@
-"""MAYERA AI - Advanced Gemini Live Voice Agent."""
+"""JARVIS AI - Advanced Gemini Live Voice Agent (formerly MAYERA)."""
 
-__version__ = "3.2.0"
+__version__ = "3.3.0"
