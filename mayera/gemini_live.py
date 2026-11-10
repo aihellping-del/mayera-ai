@@ -184,7 +184,10 @@ class GeminiLiveSession:
             note = (
                 "[System note - do not read this aloud: Golu just "
                 "reconnected. Greet him warmly and briefly in one "
-                "sentence, like continuing an ongoing friendship.]"
+                "sentence, like continuing an ongoing friendship. "
+                "Do NOT repeat anything you said before the "
+                "disconnect - after this one line, stay silent and "
+                "listen.]"
             )
         await self._send_instruction_turn(note)
 

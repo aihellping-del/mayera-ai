@@ -32,6 +32,7 @@ let micCtx = null, micStream = null, micProcessor = null, micSource = null, micS
 // --- playback graph ---
 let playCtx = null;
 let playHead = 0;                 // next scheduled buffer start time
+let duckUntilWall = 0;            // wall-clock (s) until which JARVIS's own voice is audible - mic echo duck window
 const scheduled = new Set();      // live BufferSources (for interruption flush)
 
 // --- animation levels (0..1) ---
@@ -148,10 +149,21 @@ async function startMicrophone() {
 
   micProcessor.onaudioprocess = (e) => {
     const raw = e.inputBuffer.getChannelData(0);
-    micLevel = Math.max(micLevel, Math.min(1, rmsOf(raw) * 3));
+    const r = rmsOf(raw);
+    micLevel = Math.max(micLevel, Math.min(1, r * 3));
     if (!callActive || micMuted) return;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    const pcm = floatToPcm16(resampleFloats(raw, micCtx.sampleRate, MIC_RATE));
+    // Echo guard (v3.10): while JARVIS's own voice is still playing
+    // from the speakers (+300 ms tail), send the mic SOFTLY (x0.35)
+    // so he does not hear and answer himself - that self-hearing was
+    // making him repeat lines. Golu's real voice up close is LOUD
+    // (rms >= 0.22) and always passes at full volume, so barge-in
+    // keeps working.
+    let samples = raw;
+    if (performance.now() / 1000 < duckUntilWall && r < 0.22) {
+      samples = Float32Array.from(raw, (v) => v * 0.35);
+    }
+    const pcm = floatToPcm16(resampleFloats(samples, micCtx.sampleRate, MIC_RATE));
     ws.send(pcm.buffer);
   };
   micSource.connect(micProcessor);
@@ -193,6 +205,9 @@ function playAiAudio(arrayBuffer) {
   const startAt = Math.max(playHead, ctx.currentTime + 0.03);
   src.start(startAt);
   playHead = startAt + buffer.duration;
+  // wall-clock end of everything scheduled so far (+300 ms tail):
+  // the mic duck uses this to know JARVIS is still audible.
+  duckUntilWall = performance.now() / 1000 + (playHead - ctx.currentTime) + 0.30;
   scheduled.add(src);
   src.onended = () => scheduled.delete(src);
   if (callActive) setState("speaking", "JARVIS bol raha hai...");
@@ -204,6 +219,7 @@ function flushPlayback() {
   scheduled.clear();
   playHead = 0;
   speakLevel = 0;
+  duckUntilWall = 0;
 }
 
 /* ------------------------------------------------------------------ */

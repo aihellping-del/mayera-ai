@@ -474,3 +474,27 @@ Particle Blue preserved as static/styles-particle.css.
 Manifest 33 -> 35 files. Verified by local server + Playwright
 screenshots (idle + forced listening): orb renders with correct
 colour zones, no centre text, green line glows while listening.
+
+--- v3.10.0 addendum (2026-11-10): NOTEPAD-TYPE + REPEAT FIXES ---
+User report: "Notepad khol to deta hai, likh nahi pa raha" and
+"kabhi kabhi baat ko repeat karta hai".
+(1) NOTEPAD: root cause in pc_control - open_app returned the
+instant `cmd /c start` fired; type_text then pasted into whatever
+window still had focus (the browser), so the text vanished. Fix:
+new _default_focuser (ctypes EnumWindows -> process image match ->
+SetForegroundWindow, polled); open_app waits up to 2.5s for the
+app window to come to front and records it; type_text re-focuses
+a freshly opened app (<=25s) and settles 250ms before pasting.
+Effectors injectable; 15/15 new tests (~/workspace/test_pc_focus.py)
+cover ordering, staleness, no-image apps, focus-failure honesty.
+Windows-side focus behaviour itself can only be proven on his PC.
+(2) REPEAT: three layers - (a) instruction rule (6): never repeat
+a spoken line; own voice echoing from speakers is NOT Golu
+talking, do not answer it; never re-deliver the last answer after
+a reconnect. (b) the reconnect greeting note now says the same
+explicitly. (c) app.js echo ducking: while JARVIS's audio is
+scheduled/playing (+300ms tail) mic chunks go out at x0.35 gain
+unless the mic RMS is >= 0.22 (real close speech / barge-in
+always passes at full volume). AEC was already on in
+getUserMedia; this covers loud-speaker leakage AEC misses.
+Regressions 12/12 + 14/14; app.js passes node --check.

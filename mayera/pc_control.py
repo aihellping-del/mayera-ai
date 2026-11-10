@@ -21,6 +21,7 @@ Windows par" result instead of failing.
 import datetime
 import subprocess
 import sys
+import time
 import webbrowser
 from pathlib import Path
 
@@ -119,6 +120,61 @@ def _default_typer(text):
         user32.keybd_event(vk, 0, flags, 0)  # Ctrl down, V down, V up, Ctrl up
 
 
+def _default_focuser(image, timeout):
+    """Wait for a window of the given process image (e.g. 'notepad.exe')
+    to exist, bring it to the foreground, and report whether it ended
+    up in front. v3.10: open_app used to return the instant the
+    launcher fired, so a following type_text pasted into whatever
+    window still had focus (usually the browser) and the text was
+    lost - his 'Notepad khulta hai, likhta nahi' bug."""
+    import ctypes
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    target = (image or "").lower()
+    if not target:
+        return False
+    deadline = time.monotonic() + max(0.2, float(timeout or 0))
+    found = [None]
+    enum_proc = ctypes.WINFUNCTYPE(
+        ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+    def _cb(hwnd, _lparam):
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        pid = ctypes.c_ulong(0)
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if not pid.value:
+            return True
+        handle = kernel32.OpenProcess(0x1000, False, pid.value)
+        if not handle:
+            return True
+        try:
+            buf = ctypes.create_unicode_buffer(260)
+            size = ctypes.c_ulong(260)
+            if kernel32.QueryFullProcessImageNameW(
+                    handle, 0, buf, ctypes.byref(size)):
+                if buf.value.lower().endswith(target):
+                    found[0] = hwnd
+                    return False
+            return True
+        finally:
+            kernel32.CloseHandle(handle)
+
+    while time.monotonic() <= deadline:
+        found[0] = None
+        user32.EnumWindows(enum_proc(_cb), 0)
+        if found[0]:
+            user32.SetForegroundWindow(found[0])
+            time.sleep(0.12)
+            if user32.GetForegroundWindow() == found[0]:
+                return True
+            user32.SetForegroundWindow(found[0])
+            time.sleep(0.12)
+            return user32.GetForegroundWindow() == found[0]
+        time.sleep(0.1)
+    return False
+
+
 def _default_screenshot(path):
     """Capture the primary screen to a PNG via PowerShell/.NET -
     no third-party dependency needed."""
@@ -200,7 +256,8 @@ def _default_keyer(key):
 class PcController:
     def __init__(self, is_windows=None, runner=None, volumer=None,
                  typer=None, shooter=None, opener=None, home=None,
-                 mover=None, clicker=None, scroller=None, keyer=None):
+                 mover=None, clicker=None, scroller=None, keyer=None,
+                 focuser=None, sleeper=None):
         self._win = (sys.platform.startswith("win")
                      if is_windows is None else is_windows)
         self._runner = runner or _default_runner
@@ -213,6 +270,9 @@ class PcController:
         self._clicker = clicker or _default_clicker
         self._scroller = scroller or _default_scroller
         self._keyer = keyer or _default_keyer
+        self._focuser = focuser or _default_focuser
+        self._sleep = sleeper or time.sleep
+        self._last_open = None  # (process image, monotonic time)
 
     def _guard(self):
         if not self._win:
@@ -235,7 +295,15 @@ class PcController:
                     "message": f"'{app}' meri list me nahi hai. List: "
                                + ", ".join(sorted(set(OPEN_APPS)))}
         self._runner(["cmd", "/c", "start", "", target])
-        return {"status": "opened", "app": app}
+        # v3.10: WAIT for the app's window to actually come to the
+        # front before reporting success - otherwise a following
+        # type_text pastes into the wrong window and the text is lost.
+        image = CLOSE_APPS.get(self._norm(app))
+        focused = False
+        if image:
+            focused = bool(self._focuser(image, 2.5))
+            self._last_open = (image, time.monotonic())
+        return {"status": "opened", "app": app, "focused": focused}
 
     def close_app(self, app):
         blocked = self._guard()
@@ -274,8 +342,18 @@ class PcController:
             return {"status": "error", "message": "khaali text"}
         if len(text) > 2000:
             text = text[:2000]
+        # v3.10: if an app was opened a moment ago, RE-FOCUS its
+        # window first and let focus settle, then paste - this is
+        # the actual fix for 'Notepad khulta hai, likhta nahi'.
+        refocused = False
+        if self._last_open:
+            image, when = self._last_open
+            if time.monotonic() - when <= 25:
+                refocused = bool(self._focuser(image, 1.5))
+                self._sleep(0.25)
         self._typer(text)
-        return {"status": "typed", "chars": len(text)}
+        return {"status": "typed", "chars": len(text),
+                "refocused": refocused}
 
     # ------------------------------------------------------------------
     # Mouse + keys (v3.4): he points with his voice - "mouse upar le
