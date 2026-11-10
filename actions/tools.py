@@ -692,14 +692,17 @@ def function_declarations():
             name="whatsapp_send",
             description=(
                 "Send a WhatsApp message from the user's own "
-                "WhatsApp (in JARVIS's browser) to ONE contact he "
-                "names, with the exact message he dictates. The "
-                "tool itself first shows an on-screen Haan/Nahi "
-                "card with the contact and full text - only his "
-                "tap can send it; a 'cancelled' result means NOT "
-                "sent, never argue. If it returns needs_login, "
-                "tell him to scan the QR in JARVIS's browser with "
-                "his phone (one time only)."
+                "WhatsApp - the desktop APP already installed on "
+                "his PC (primary route; works by seeing the "
+                "screen, clicking and typing, Enter sends) - to "
+                "ONE contact he names, with the exact message he "
+                "dictates. The tool itself first shows an "
+                "on-screen Haan/Nahi card with the contact and "
+                "full text - only his tap can send it; a "
+                "'cancelled' result means NOT sent, never argue. "
+                "If it returns needs_login (web fallback route), "
+                "tell him to scan the QR in JARVIS's browser "
+                "with his phone (one time only)."
             ),
             parameters=types.Schema(
                 type=types.Type.OBJECT,
@@ -775,7 +778,7 @@ _BROWSER_TOOLS = {"browser_search", "browser_research",
 class ToolExecutor:
     def __init__(self, store, opener=None, pc=None, yt=None, vision=None,
                  plugins=None, files=None, confirm=None, browser=None,
-                 whatsapp=None):
+                 whatsapp=None, whatsapp_desktop=None):
         self._store = store
         self._opener = opener or webbrowser.open
         self._pc = pc  # PcController (v3.1 PC Control pack) or None
@@ -785,6 +788,9 @@ class ToolExecutor:
         self._confirm = confirm  # ConfirmGate (v3.17) or None
         self._browser = browser  # BrowserAgent (v3.20) or None
         self._whatsapp = whatsapp  # WhatsAppMessenger (v3.25) or None
+        # v3.27: the desktop-APP messenger (his installed WhatsApp)
+        # is the primary route; the web one is the fallback.
+        self._whatsapp_desktop = whatsapp_desktop
         if plugins is None:
             try:
                 from plugins import loader as plugins_loader
@@ -964,8 +970,24 @@ class ToolExecutor:
                     "message": f"plugin {name}: {exc.__class__.__name__}"}
 
     async def _whatsapp_action(self, args):
-        """whatsapp_send (v3.25): the messenger enforces the
-        confirm card itself; here we only supply the gate."""
+        """whatsapp_send: the messenger enforces the confirm card
+        itself; here we only supply the gate. v3.27: his installed
+        desktop APP is tried first (that is the WhatsApp he
+        actually uses); the browser/Web route runs only when the
+        app route says it is not available (needs_app)."""
+        if self._whatsapp_desktop is not None:
+            def _sync_confirm(question):
+                if self._confirm is None:
+                    return False
+                return bool(self._confirm.ask(question))
+
+            out = await asyncio.to_thread(
+                self._whatsapp_desktop.send_message,
+                args.get("contact", ""), args.get("message", ""),
+                _sync_confirm)
+            if out.get("status") != "needs_app":
+                return out
+            # fall through to the web route below
         if self._whatsapp is None:
             return {"status": "error", "message": "whatsapp unavailable"}
 

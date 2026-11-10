@@ -48,6 +48,10 @@ OPEN_APPS = {
     "control panel": "control",
     "snipping tool": "snippingtool",
     "camera": "microsoft.windows.camera:",
+    # v3.27: the WhatsApp desktop app (Microsoft Store) opens via
+    # its registered URI scheme; the focus map below waits for
+    # its WhatsApp.exe window.
+    "whatsapp": "whatsapp:",
 }
 
 # alias -> process image name for taskkill. Explorer is NOT here on
@@ -66,6 +70,7 @@ CLOSE_APPS = {
     "wordpad": "write.exe",
     "snipping tool": "SnippingTool.exe",
     "camera": "WindowsCamera.exe",
+    "whatsapp": "WhatsApp.exe",
 }
 
 _VOLUME_KEYS = {"mute": 0xAD, "up": 0xAF, "down": 0xAE}

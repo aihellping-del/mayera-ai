@@ -83,6 +83,7 @@ _pc = PcController()
 from actions.browser_agent import BrowserAgent  # noqa: E402
 from actions.file_ops import FileOps  # noqa: E402
 from actions.whatsapp import WA_PART, WA_URL, WhatsAppMessenger  # noqa: E402
+from actions.whatsapp_desktop import WhatsAppDesktop  # noqa: E402
 from core.confirm import ConfirmGate  # noqa: E402
 
 confirm_gate = ConfirmGate()
@@ -96,12 +97,15 @@ async def _confirm_notify(cid, question):
 confirm_gate.notify = _confirm_notify
 _browser_agent = BrowserAgent(
     warm_tabs=[(WA_URL, WA_PART)])  # v3.26: WhatsApp pre-loads in background
+_vision = ScreenVision(pc=_pc)  # v3.12: JARVIS can actually SEE the screen
 tool_executor = ToolExecutor(
     store, pc=_pc, yt=YoutubePlayer(),
-    vision=ScreenVision(pc=_pc),  # v3.12: JARVIS can actually SEE the screen
+    vision=_vision,
     files=FileOps(), confirm=confirm_gate,
     browser=_browser_agent,
-    whatsapp=WhatsAppMessenger(_browser_agent),  # v3.25: his WhatsApp
+    whatsapp=WhatsAppMessenger(_browser_agent),  # v3.25: web fallback
+    # v3.27: PRIMARY route - the WhatsApp app already on his PC
+    whatsapp_desktop=WhatsAppDesktop(_pc, _vision),
 )
 watcher = ProactiveWatcher(store)
 

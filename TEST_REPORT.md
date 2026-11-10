@@ -1085,3 +1085,28 @@ truthful).
 Tests: 11/11 test_whatsapp (new: chat row appearing only on the
 3rd poll still sends) + browser/screen/noise/mouse/focus
 regressions + server smoke.
+
+--- v3.27.0 addendum (2026-11-10): WHATSAPP VIA HIS OWN APP ---
+User's correction, twice over: 'mere PC me already WhatsApp
+hai, usko use nahi karta hai' + he tapped 'WhatsApp app wala
+rasta banao'. The v3.25 web route ignored the WhatsApp desktop
+app already installed and logged in on his PC. New
+actions/whatsapp_desktop.py drives THAT app like a person:
+open_app('whatsapp') (OPEN_APPS gains the whatsapp: URI launch;
+CLOSE_APPS gains WhatsApp.exe for the focus wait), vision
+locates the search box -> arrow clicks -> type contact ->
+vision locates the chat row -> click -> vision locates the
+'Type a message' box -> click -> type the dictated message ->
+Haan/Nahi card (exact contact + text) -> Enter sends -> the
+sent text is located on screen before 'verified' is claimed.
+Denied/no approver = typed text erased by backspaces, Enter is
+never pressed. If the app window never comes up the result is
+needs_app and the executor falls back to the v3.25 web route;
+mid-flow failures stay specific errors (no silent fallback).
+Executor prefers desktop; main.py shares one ScreenVision.
+Tests: 11/11 new (~/workspace/test_whatsapp_desktop.py - flow
+order, gate deny erases + never sends, no-approver cancel,
+needs_app + web fallback, unknown contact) + regressions
+(whatsapp web 11/11, mouse 11/11, focus 15/15, notepad 42/42,
+screen-click 13/13, browser 18/18, noise 13/13, port 36/36)
++ server smoke.
