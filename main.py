@@ -56,6 +56,7 @@ from mayera.gemini_live import GeminiLiveSession
 from mayera.memory_store import MemoryStore
 from mayera.pc_control import PcController
 from mayera.proactive import ProactiveWatcher
+from mayera.screen_vision import ScreenVision
 from mayera.tools import ToolExecutor
 from mayera.youtube_play import YoutubePlayer
 
@@ -74,7 +75,11 @@ manager = ConnectionManager()
 # sessions that then talk over each other.
 start_lock = asyncio.Lock()
 store = MemoryStore()
-tool_executor = ToolExecutor(store, pc=PcController(), yt=YoutubePlayer())
+_pc = PcController()
+tool_executor = ToolExecutor(
+    store, pc=_pc, yt=YoutubePlayer(),
+    vision=ScreenVision(pc=_pc),  # v3.12: JARVIS can actually SEE the screen
+)
 watcher = ProactiveWatcher(store)
 
 live_session: GeminiLiveSession | None = None
@@ -153,12 +158,12 @@ def detect_mood(text: str):
     return None
 
 
-STOP_SINGLE = {"stop", "chup"}                      # must be the whole command
+STOP_SINGLE = {"stop", "chup", "cancel"}           # must be the whole command
 STOP_PHRASES = (                                     # may lead a short command
     "stop talking", "stop karo", "ruk jao", "ruk ja", "chup karo",
-    "chup ho jao", "band karo", "bas karo",
+    "chup ho jao", "band karo", "bas karo", "cancel karo",
 )
-_FILLER_PREFIXES = ("mayera", "hey", "please", "ab", "tum")
+_FILLER_PREFIXES = ("mayera", "jarvis", "hey", "please", "ab", "tum")
 
 
 def is_stop_command(text: str) -> bool:
@@ -168,7 +173,7 @@ def is_stop_command(text: str) -> bool:
     words = re.sub(r"[^a-z ]", " ", (text or "").lower()).split()
     while words and words[0] in _FILLER_PREFIXES:
         words.pop(0)
-    while words and words[-1] in ("please", "mayera"):
+    while words and words[-1] in ("please", "mayera", "jarvis"):
         words.pop()
     cmd = " ".join(words)
     if not cmd or len(cmd) > 40:

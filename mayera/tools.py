@@ -288,6 +288,33 @@ def function_declarations():
             ),
         ),
         types.FunctionDeclaration(
+            name="look_at_screen",
+            description=(
+                "LOOK at his PC screen yourself and get a short "
+                "description of what is on it. Use when he asks 'main "
+                "kya kar raha hu', 'ye kya hai', 'ye error kya hai', "
+                "'screen par kya hai', 'padho kya likha hai' - and to "
+                "CHECK the result after opening an app, typing, or "
+                "before clicking (never click blindly). question = "
+                "what he wants to know about the screen, if specific. "
+                "Answer ONLY from the returned description; if it "
+                "says something is not visible, say so honestly. "
+                "Sensitive things (passwords, OTPs) are deliberately "
+                "never described - do not ask for them."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "question": types.Schema(
+                        type=types.Type.STRING,
+                        description="What he wants to know about the "
+                                    "screen, e.g. 'ye error kya hai'. "
+                                    "Empty = general description.",
+                    )
+                },
+            ),
+        ),
+        types.FunctionDeclaration(
             name="open_website",
             description=(
                 "Open a website in the user's default browser, e.g. when "
@@ -312,11 +339,12 @@ _URL_OK = re.compile(r"^(https?://)?[A-Za-z0-9.\-]+\.[A-Za-z]{2,}(/\S*)?$")
 
 
 class ToolExecutor:
-    def __init__(self, store, opener=None, pc=None, yt=None):
+    def __init__(self, store, opener=None, pc=None, yt=None, vision=None):
         self._store = store
         self._opener = opener or webbrowser.open
         self._pc = pc  # PcController (v3.1 PC Control pack) or None
         self._yt = yt  # YoutubePlayer (v3.4) or None
+        self._vision = vision  # ScreenVision (v3.12) or None
 
     async def execute(self, name, args):
         args = args or {}
@@ -341,6 +369,10 @@ class ToolExecutor:
             if name in ("youtube_search", "youtube_play"):
                 # A web fetch can take a second or two - same rule.
                 return await asyncio.to_thread(self._yt_action, name, args)
+            if name == "look_at_screen":
+                # Capture + a vision-model call takes seconds - it
+                # must never stall live audio either (v3.12).
+                return await asyncio.to_thread(self._vision_action, args)
             if name == "open_website":
                 # webbrowser.open() blocks; run it off the event loop
                 # so it can never stall live audio forwarding (v3.0).
@@ -374,6 +406,11 @@ class ToolExecutor:
         if name == "press_key":
             return self._pc.press_key(args.get("key", ""))
         return self._pc.take_screenshot()
+
+    def _vision_action(self, args):
+        if self._vision is None:
+            return {"status": "error", "message": "screen vision unavailable"}
+        return self._vision.look(args.get("question", ""))
 
     def _yt_action(self, name, args):
         if self._yt is None:

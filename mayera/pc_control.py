@@ -19,8 +19,10 @@ Windows par" result instead of failing.
 """
 
 import datetime
+import os
 import subprocess
 import sys
+import tempfile
 import time
 import webbrowser
 from pathlib import Path
@@ -257,7 +259,7 @@ class PcController:
     def __init__(self, is_windows=None, runner=None, volumer=None,
                  typer=None, shooter=None, opener=None, home=None,
                  mover=None, clicker=None, scroller=None, keyer=None,
-                 focuser=None, sleeper=None):
+                 focuser=None, sleeper=None, bytes_capturer=None):
         self._win = (sys.platform.startswith("win")
                      if is_windows is None else is_windows)
         self._runner = runner or _default_runner
@@ -272,6 +274,7 @@ class PcController:
         self._keyer = keyer or _default_keyer
         self._focuser = focuser or _default_focuser
         self._sleep = sleeper or time.sleep
+        self._bytes_capturer = bytes_capturer
         self._last_open = None  # (process image, monotonic time)
 
     def _guard(self):
@@ -429,3 +432,31 @@ class PcController:
         except Exception:  # noqa: BLE001 - opening it is a bonus
             pass
         return {"status": "saved", "path": str(path)}
+
+    def capture_png(self):
+        """Capture the screen as PNG BYTES, in memory only (v3.12).
+
+        Unlike take_screenshot this saves nothing to Pictures and
+        opens nothing - it exists so JARVIS can LOOK at the screen
+        (mayera/screen_vision.py) when Golu asks what is on it, or
+        to check a click/type result. The default path reuses the
+        PowerShell shooter via a temp file that is deleted at once.
+        """
+        blocked = self._guard()
+        if blocked:
+            return blocked
+        if self._bytes_capturer is not None:
+            data = self._bytes_capturer()
+            return {"status": "ok", "png": data}
+        fd, tmp = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        try:
+            self._shooter(tmp)
+            with open(tmp, "rb") as fh:
+                data = fh.read()
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+        return {"status": "ok", "png": data}

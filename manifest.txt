@@ -19,6 +19,7 @@ mayera/key_vault.py
 mayera/memory_store.py
 mayera/pc_control.py
 mayera/proactive.py
+mayera/screen_vision.py
 mayera/tools.py
 mayera/youtube_play.py
 requirements.txt
