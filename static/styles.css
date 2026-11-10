@@ -214,3 +214,23 @@ body[data-state="listening"] .wave i, body[data-state="speaking"] .wave i { anim
   .frame { inset: 6px; }
   .frame .fc { width: 70px; height: 70px; }
 }
+
+
+/* ===== THEME 11: PARTICLE HEAD - BLUE (photo wala style) ===== */
+:root { --pc-main: #38bdf8; --pc-light: #bae6fd; --pc-brain: #f59e0b; --pc-brain2: #fde68a; --pc-glow: #2563eb; }
+body { background: radial-gradient(1000px 640px at 50% 30%, #04101f 0%, #020610 58%, #010204 100%); }
+#pcanvas { position: absolute; width: 440px; height: 440px; left: 50%; top: 44%; transform: translate(-50%, -50%); z-index: 1; pointer-events: none; }
+.orb, .ring, .core, .face { display: none !important; }
+.orb-wrap::after { border-color: rgba(56,189,248,.35); background: radial-gradient(ellipse, rgba(37,99,235,.25), transparent 70%); box-shadow: 0 0 30px rgba(37,99,235,.35); bottom: -18px; }
+.sidewave { opacity: .3; }
+.logo { background: linear-gradient(135deg, #38bdf8, #2563eb); box-shadow: 0 0 16px rgba(56,189,248,.6); }
+.conn { border-color: rgba(56,189,248,.35); }
+.conn.mem { color: #fcd34d; }
+.icon-btn { border-color: rgba(56,189,248,.4); }
+.icon-btn:hover { border-color: #38bdf8; box-shadow: 0 0 12px rgba(56,189,248,.5); }
+.status { color: #bae6fd; text-shadow: 0 0 14px rgba(56,189,248,.5); }
+.wave i { background: linear-gradient(180deg, #7dd3fc, #38bdf8, #f59e0b); }
+.controls .btn-start { background: linear-gradient(#04101f, #04101f) padding-box, linear-gradient(135deg, #38bdf8, #2563eb, #f59e0b) border-box; box-shadow: 0 0 34px rgba(37,99,235,.55), 0 0 70px rgba(56,189,248,.3); }
+.floor i:nth-child(1) { border-color: rgba(56,189,248,.3); }
+.floor i:nth-child(2) { border-color: rgba(37,99,235,.45); box-shadow: 0 0 24px rgba(37,99,235,.3); }
+.floor i:nth-child(3) { border-color: rgba(125,211,252,.5); box-shadow: 0 0 30px rgba(56,189,248,.35); }

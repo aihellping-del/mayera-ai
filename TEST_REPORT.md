@@ -231,3 +231,18 @@ config with thinking_budget=0 (legacy = None), and stubbed-connect
 tests pass for fast-first, legacy fallback after rejection, and
 last-model persistence. Real per-turn latency can only be measured
 on his PC/internet.
+
+--- v2.9.0 addendum (2026-11-10): PARTICLE HEAD UI (user pick #11) ---
+The user sent a photo of a particle-style AI head on a monitor and
+picked the blue variant from 3 previews. New default UI: an animated
+canvas particle head - 2,400 dots sampled inside a head-profile
+silhouette, golden brain cluster, golden neck circuit lines flowing
+to a glowing chest core, particles dispersing to the right; the
+animation speeds up while MAYERA speaks. New file static/particles.js
+activates ONLY when the active theme defines --pc-main (otherwise it
+hides its canvas), so the kept alternate themes (styles-neon.css =
+the previous default, styles-classic.css, styles-aurora.css) are
+unaffected. static/index.html gains the #pcanvas element and the
+particles.js script tag. Verified: real package run locally +
+headless screenshot shows the particle head as the default UI; the
+updater test (fake v2.8 install) is in the push notes.
