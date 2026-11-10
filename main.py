@@ -118,6 +118,36 @@ async def send_ui_status(state: str, message: str = ""):
 voice_state = {"last_voice": 0.0, "last_ai": 0.0, "talking": False,
                "thinking_sent": False, "awaiting_reply": False}
 
+# ---------------------------------------------------------------------------
+# Mood memory (v3.2): MAYERA "samajhti" hai - she notices how Golu
+# sounded and carries it into the NEXT conversation, where the system
+# instruction gently reminds her ("pichhli baar wo udaas tha, pehle
+# pyar se haal puchhna"). Simple keyword scoring on the server-side
+# transcription; only a clear signal is stored, neutral talk changes
+# nothing.
+# ---------------------------------------------------------------------------
+_MOOD_SAD = ("udaas", "dukh", "pareshan", "pareshaan", "thak gaya",
+             "thak gya", "thaka hua", "akela", "akele", "rona",
+             "tension", "chinta", "bura lag", "mann nahi", "man nahi",
+             "neend nahi", "beemar", "bimar", "dard", "mushkil",
+             "gussa", "naraz", "naaraaz", "bor ho raha")
+_MOOD_HAPPY = ("khush", "maza aa", "mazaa", "badhiya", "bahut acha",
+               "bahut achha", "mast", "happy", "kamaal", "jeet gaya",
+               "pass ho gaya", "bahut khush")
+
+
+def detect_mood(text: str):
+    """'udaas' / 'khush' / None from one transcribed user turn."""
+    t = " " + (text or "").lower() + " "
+    sad = sum(1 for w in _MOOD_SAD if w in t)
+    happy = sum(1 for w in _MOOD_HAPPY if w in t)
+    if sad > happy:
+        return "udaas"
+    if happy > sad:
+        return "khush"
+    return None
+
+
 STOP_SINGLE = {"stop", "chup"}                      # must be the whole command
 STOP_PHRASES = (                                     # may lead a short command
     "stop talking", "stop karo", "ruk jao", "ruk ja", "chup karo",
@@ -174,8 +204,15 @@ async def on_interrupted():
 
 
 async def on_user_text(text: str):
-    """Server-side only: STOP command + activity tracking."""
+    """Server-side only: STOP command + activity tracking + mood."""
     watcher.mark_activity()
+    mood = detect_mood(text)
+    if mood:
+        try:
+            store.set_setting("last_mood", mood)
+            store.set_setting("last_mood_at", str(int(time.time())))
+        except Exception:  # noqa: BLE001 - mood is a bonus, never fatal
+            pass
     if is_stop_command(text):
         log.info("STOP command heard - flushing playback.")
         await manager.send_interrupted()

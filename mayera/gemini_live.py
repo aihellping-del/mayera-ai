@@ -77,6 +77,23 @@ class GeminiLiveSession:
                     "se istemal karo, ginwao mat):\n"
                     + lines
                 )
+            # Mood memory (v3.2): how he sounded last time, if recent,
+            # so she opens with care instead of a blank slate.
+            mood = self._store.get_setting("last_mood", "")
+            try:
+                mood_age = time.time() - float(
+                    self._store.get_setting("last_mood_at", "0"))
+            except (TypeError, ValueError):
+                mood_age = 1e18
+            if mood in ("udaas", "khush") and mood_age < 48 * 3600:
+                label = ("thoda udaas/pareshan" if mood == "udaas"
+                         else "khush aur energetic")
+                text += (
+                    "\n\nPICHHLI BAAT KA HAAL: Golu pichhli baar "
+                    f"{label} mehsoos kar raha tha. Aaj baat ki "
+                    "shuruaat me pyar se uska haal puchhna aur usi "
+                    "ehsaas ko dhyaan me rakhkar baat karna."
+                )
             cp = self._store.get_checkpoint()
             if cp and cp.get("topic"):
                 text += (

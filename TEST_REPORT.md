@@ -306,3 +306,21 @@ effects are injectable: 20/20 unit tests pass with a fake OS layer
 clean "unsupported"). PC actions run via asyncio.to_thread so they
 cannot stall live audio. The Windows-only effectors (ctypes volume/
 typing, PowerShell capture) can only be exercised on the user's PC.
+
+--- v3.2.0 addendum (2026-11-10): SMOOTH + SAMAJHDAAR personality ---
+User asked: replies smoother, and give her a woman-like capacity to
+think and understand. (1) New SAMAJH block in the system instruction:
+listen for the feeling behind the words, never judge or scold, adapt
+voice to his mood, small caring check-ins, when he goes quiet just be
+present. (2) New SMOOTH BAATCHEET block: replies flow like a story,
+always complete, tied to the previous turn, no repetition, graceful
+resume after interruption without an apology loop. All functional
+rules (speed, memory, PC control, STOP, honesty) preserved; the
+instruction grew 2165 -> 2990 chars on purpose - depth was the
+request. (3) MOOD MEMORY: main.detect_mood scores each transcribed
+turn (udaas/khush keyword sets, ties ignored); a clear mood is saved
+(last_mood/last_mood_at) and, if <48h old, injected into the next
+session's instruction ("PICHHLI BAAT KA HAAL...") so she opens with
+care. Tests: detect_mood 7/7, injection fresh/stale/wording pass,
+on_user_text stores mood; regressions 15/15 behaviour, thinking
+watchdog 2/2, PC tools 20/20.
