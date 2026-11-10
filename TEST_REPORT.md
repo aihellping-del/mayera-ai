@@ -935,3 +935,28 @@ updated 36 -> 42 in four suites) + server smoke. Real CDP driving
 of his Chrome/Edge can only be proven on his PC - first voice
 tests: 'apne browser me horror movies search karo', then 'dusra
 wala kholo', then 'Wikipedia par click karo'.
+
+--- v3.21.0 addendum (2026-11-10): CLICK BY NAME INSIDE HIS OWN
+CHROME / ANY APP (user: 'Chrome ke andar jo bolu wo click kare,
+aur us Chrome wali screen ko bhi wo dekhe') ---
+Honest boundary first: his everyday Chrome cannot be driven from
+inside while it runs normally (Chrome blocks remote control of
+the everyday profile) - that is exactly why v3.20 gave JARVIS his
+own browser. For HIS windows, this version connects the two
+abilities JARVIS already had (screen vision v3.12 + mouse click
+v3.13) into one tool: click_on_screen(text) - captures the screen,
+the vision model POINTS at the named element (strict JSON point
+on a 0-1000 scale, 'found: false' if not visible - never a
+guess), the point is scaled to real pixels via the PNG's IHDR
+size, and PcController.click clicks exactly there. Risky labels
+(buy/pay/send/delete...) first go through the Haan/Nahi gate;
+denied = mouse never moves. Works in his Chrome, Notepad, any
+app - whatever is on screen. Declarations 42 -> 43.
+Tests: 13/13 new (~/workspace/test_screen_click.py - IHDR parse,
+point parse/rejects, 0-1000 -> pixel scaling (960,270 on
+1920x1080), not-found honesty, executor click landing, gate
+deny/allow) + all regressions (decl counts 42 -> 43 in five
+suites) + server smoke. Vision pointing accuracy is only
+provable on his PC with his key - first test: open his Chrome,
+say 'screen par jo Download dikha raha hai us par click karo'
+style sentence with a clearly visible label.

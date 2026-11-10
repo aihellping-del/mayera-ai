@@ -689,6 +689,23 @@ def function_declarations():
                 type=types.Type.OBJECT, properties={}),
         ),
         types.FunctionDeclaration(
+            name="click_on_screen",
+            description=(
+                "Look at the user's screen, FIND the named element "
+                "(link, button, tab - in his own Chrome or any app) "
+                "and CLICK it. Use when he says 'mere Chrome me "
+                "Download par click karo' or names something visible "
+                "on screen. Money/send/delete-looking labels first "
+                "ask on a confirmation card by themselves."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={"text": types.Schema(
+                    type=types.Type.STRING,
+                    description="Text/label of the element to click.")},
+                required=["text"]),
+        ),
+        types.FunctionDeclaration(
             name="open_website",
             description=(
                 "Open a website in the user's default browser, e.g. when "
@@ -797,6 +814,11 @@ class ToolExecutor:
                 # Capture + a vision-model call takes seconds - it
                 # must never stall live audio either (v3.12).
                 return await asyncio.to_thread(self._vision_action, args)
+            if name == "click_on_screen":
+                # See + locate + click (v3.21): also seconds of
+                # vision work - same off-the-loop rule.
+                return await asyncio.to_thread(
+                    self._screen_click_action, args)
             if name == "open_website":
                 # webbrowser.open() blocks; run it off the event loop
                 # so it can never stall live audio forwarding (v3.0).
@@ -842,6 +864,39 @@ class ToolExecutor:
         if self._vision is None:
             return {"status": "error", "message": "screen vision unavailable"}
         return self._vision.look(args.get("question", ""))
+
+    def _screen_click_action(self, args):
+        """click_on_screen (v3.21): the vision model points at the
+        named element on HIS screen (his Chrome, any app), the
+        risky-label gate runs first for money/send/delete labels,
+        then the real mouse clicks exactly there."""
+        if self._vision is None or self._pc is None:
+            return {"status": "error",
+                    "message": "screen click unavailable"}
+        text = (args.get("text") or "").strip()
+        if not text:
+            return {"status": "error",
+                    "message": "kis par click karna hai, ye nahi bataya"}
+        from actions.browser_agent import is_risky_label
+        if is_risky_label(text):
+            approved = False
+            if self._confirm is not None:
+                approved = bool(self._confirm.ask(
+                    f"Screen par '{text}' par click karu? Ye paisa/"
+                    "send/delete wala button lagta hai."))
+            if not approved:
+                return {"status": "cancelled",
+                        "message": f"'{text}' par click NAHI kiya - "
+                                   "confirmation nahi mili"}
+        located = self._vision.locate(text)
+        if located.get("status") != "ok":
+            return located
+        clicked = self._pc.click(located["x"], located["y"])
+        if clicked.get("status") not in ("ok", "clicked", "done"):
+            return clicked
+        return {"status": "done", "clicked": text,
+                "at": [located["x"], located["y"]],
+                "note": "screen par dekh kar wahi element click kiya"}
 
     def _yt_action(self, name, args):
         if self._yt is None:

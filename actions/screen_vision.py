@@ -75,11 +75,124 @@ def _default_describer(png_bytes, question):
     return (getattr(response, "text", "") or "").strip()
 
 
+_LOCATE_PROMPT = (
+    "You are the eyes and pointing finger of a voice assistant. "
+    "Look at this screenshot of the user's own PC screen and find "
+    "the ONE visible UI element (link, button, tab, menu item, "
+    "icon) whose text or label matches: \"{target}\". "
+    "Reply with ONLY a JSON object, no other words: "
+    "{{\"x\": <0-1000>, \"y\": <0-1000>}} giving the CENTER of that "
+    "element, where x and y are relative coordinates on a "
+    "0-1000 scale across the whole image. If no such element is "
+    "visible, reply ONLY: {{\"found\": false}}. Never guess a "
+    "position for something you cannot actually see."
+)
+
+
+def _default_locator(png_bytes, target):
+    """One Gemini vision call returning the raw point JSON text."""
+    from google import genai
+    from google.genai import types
+
+    api_key = config.get_api_key()
+    if not api_key:
+        raise RuntimeError("no_api_key")
+    client = genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(api_version="v1beta"),
+    )
+    response = client.models.generate_content(
+        model=VISION_MODEL,
+        contents=[
+            types.Part.from_bytes(data=png_bytes, mime_type="image/png"),
+            _LOCATE_PROMPT.format(target=target),
+        ],
+    )
+    return (getattr(response, "text", "") or "").strip()
+
+
+def png_size(png_bytes):
+    """(width, height) from a PNG's IHDR header, or None."""
+    if not png_bytes or len(png_bytes) < 24:
+        return None
+    if png_bytes[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    width = int.from_bytes(png_bytes[16:20], "big")
+    height = int.from_bytes(png_bytes[20:24], "big")
+    if width <= 0 or height <= 0:
+        return None
+    return width, height
+
+
+def parse_point(text):
+    """Parse the locator's JSON point -> (x, y) in 0..1000, or None."""
+    import json
+    import re
+    match = re.search(r"\{.*\}", text or "", re.DOTALL)
+    if not match:
+        return None
+    try:
+        data = json.loads(match.group(0))
+    except ValueError:
+        return None
+    if not isinstance(data, dict) or data.get("found") is False:
+        return None
+    try:
+        x, y = float(data["x"]), float(data["y"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (0 <= x <= 1000 and 0 <= y <= 1000):
+        return None
+    return x, y
+
+
 class ScreenVision:
-    def __init__(self, pc=None, capturer=None, describer=None):
+    def __init__(self, pc=None, capturer=None, describer=None,
+                 locator=None):
         self._pc = pc
         self._capturer = capturer      # () -> bytes | dict(pc.capture_png)
         self._describer = describer or _default_describer
+        self._locator = locator or _default_locator
+
+    def locate(self, target):
+        """Find the named element on screen (v3.21): capture, ask
+        the vision model to POINT at it, scale the 0-1000 point to
+        real pixels. Returns {status, x, y, target} or an error
+        dict - never a guessed position."""
+        target = (target or "").strip()
+        if not target:
+            return {"status": "error",
+                    "message": "kis cheez par click karna hai, ye nahi bataya"}
+        try:
+            png, error = self._capture()
+        except Exception as exc:  # noqa: BLE001
+            return {"status": "error",
+                    "message": f"screenshot nahi le paya ({exc.__class__.__name__})"}
+        if error is not None:
+            return error
+        if not png:
+            return {"status": "error", "message": "screenshot khaali aaya"}
+        size = png_size(png)
+        if size is None:
+            return {"status": "error",
+                    "message": "screenshot ka size nahi padh paya"}
+        try:
+            raw = self._locator(png, target)
+        except RuntimeError:
+            return {"status": "error",
+                    "message": "API key nahi hai, screen nahi dekh sakta"}
+        except Exception as exc:  # noqa: BLE001
+            return {"status": "error",
+                    "message": f"element dhoondh nahi paya ({exc.__class__.__name__})"}
+        point = parse_point(raw)
+        if point is None:
+            return {"status": "error",
+                    "message": f"'{target}' screen par nahi dikha - "
+                               "galat click nahi karunga"}
+        width, height = size
+        x = int(round(point[0] / 1000 * width))
+        y = int(round(point[1] / 1000 * height))
+        return {"status": "ok", "target": target, "x": x, "y": y}
 
     def _capture(self):
         """Return (png_bytes, error_dict). Exactly one is not None."""
