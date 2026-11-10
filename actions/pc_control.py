@@ -251,6 +251,93 @@ def _default_focuser(image, timeout):
     return False
 
 
+def _default_dialog_dismisser(image):
+    """Dismiss ONE stale-session error dialog of the given app, if
+    it is showing (v3.17.1). Windows 11 Notepad restores the last
+    session's tabs on every open; a tab whose file was moved or
+    deleted makes it pop a modal 'The system cannot find the path
+    specified.' box - which then sits in front of the editor and
+    eats the text JARVIS tries to type (his 2026-11-10 screenshot).
+
+    Deliberately surgical: the window must be a standard dialog
+    (class #32770) owned by the app's process AND carry a static
+    text containing 'cannot find the path'. Save prompts and every
+    other dialog are never touched. Pressing Enter activates the
+    dialog's default button (OK). Returns True if one was dismissed.
+    """
+    if not sys.platform.startswith("win"):
+        return False
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        target = (image or "").lower()
+        if not target:
+            return False
+        enum_proc = ctypes.WINFUNCTYPE(
+            ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+        hit = [None]
+
+        def _process_matches(hwnd):
+            pid = ctypes.c_ulong(0)
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if not pid.value:
+                return False
+            handle = kernel32.OpenProcess(0x1000, False, pid.value)
+            if not handle:
+                return False
+            try:
+                buf = ctypes.create_unicode_buffer(260)
+                size = ctypes.c_ulong(260)
+                return bool(
+                    kernel32.QueryFullProcessImageNameW(
+                        handle, 0, buf, ctypes.byref(size))
+                    and buf.value.lower().endswith(target))
+            finally:
+                kernel32.CloseHandle(handle)
+
+        def _has_path_error_text(hwnd):
+            found = [False]
+
+            def _child(child, _lp):
+                cls = ctypes.create_unicode_buffer(64)
+                user32.GetClassNameW(child, cls, 64)
+                if cls.value == "Static":
+                    txt = ctypes.create_unicode_buffer(512)
+                    user32.GetWindowTextW(child, txt, 512)
+                    if "cannot find the path" in txt.value.lower():
+                        found[0] = True
+                        return False
+                return True
+
+            user32.EnumChildWindows(hwnd, enum_proc(_child), 0)
+            return found[0]
+
+        def _cb(hwnd, _lp):
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            cls = ctypes.create_unicode_buffer(64)
+            user32.GetClassNameW(hwnd, cls, 64)
+            if cls.value != "#32770":
+                return True
+            if _process_matches(hwnd) and _has_path_error_text(hwnd):
+                hit[0] = hwnd
+                return False
+            return True
+
+        user32.EnumWindows(enum_proc(_cb), 0)
+        if not hit[0]:
+            return False
+        user32.SetForegroundWindow(hit[0])
+        time.sleep(0.05)
+        user32.keybd_event(0x0D, 0, 0, 0)      # Enter down (default = OK)
+        user32.keybd_event(0x0D, 0, 2, 0)      # Enter up
+        time.sleep(0.1)
+        return True
+    except Exception:  # noqa: BLE001 - best-effort, never fatal
+        return False
+
+
 def _default_title_focuser(title_part, timeout):
     """focus_window's OS layer (v3.13, user's spec): find a window
     whose TITLE contains title_part (e.g. 'Notepad'), restore it if
@@ -401,7 +488,8 @@ class PcController:
                  typer=None, shooter=None, opener=None, home=None,
                  mover=None, clicker=None, scroller=None, keyer=None,
                  focuser=None, sleeper=None, bytes_capturer=None,
-                 title_focuser=None, clicker_at=None):
+                 title_focuser=None, clicker_at=None,
+                 dialog_dismisser=None):
         self._win = (sys.platform.startswith("win")
                      if is_windows is None else is_windows)
         self._runner = runner or _default_runner
@@ -419,6 +507,8 @@ class PcController:
         self._bytes_capturer = bytes_capturer
         self._title_focuser = title_focuser or _default_title_focuser
         self._clicker_at = clicker_at or _default_clicker_at
+        self._dialog_dismisser = (dialog_dismisser
+                                  or _default_dialog_dismisser)
         self._last_open = None  # (process image, monotonic time)
         # pyautogui FAILSAFE (v3.13, user's spec): slamming the mouse
         # into a screen corner aborts pyautogui actions. Best-effort -
@@ -456,14 +546,39 @@ class PcController:
         image = CLOSE_APPS.get(self._norm(app))
         focused = False
         if image:
+            # v3.17.1: clear the app's stale-session error dialog
+            # first (Windows 11 Notepad restoring a tab whose file
+            # is gone pops 'The system cannot find the path
+            # specified.' in front of the editor). Keep dismissing
+            # while dialogs keep appearing - several stale tabs can
+            # queue several boxes - capped at ~3 s; the normal case
+            # (no dialog) costs a single quick check.
+            self._dismiss_stale_dialogs(image)
             # v3.13: poll up to ~8s (user's spec) - the focuser
             # returns the moment the window is in front, so a fast
             # app costs nothing; a slow Windows 11 Notepad (which
             # can take several seconds on first open) is no longer
             # reported ready before its window even exists.
             focused = bool(self._focuser(image, 8.0))
+            if not focused:
+                # A late dialog can also be why focus failed.
+                self._dismiss_stale_dialogs(image)
+                focused = bool(self._focuser(image, 2.0))
             self._last_open = (image, time.monotonic())
         return {"status": "opened", "app": app, "focused": focused}
+
+    def _dismiss_stale_dialogs(self, image):
+        """Dismiss queued stale-session dialogs of this app (see
+        _default_dialog_dismisser for how narrow the match is)."""
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            try:
+                dismissed = bool(self._dialog_dismisser(image))
+            except Exception:  # noqa: BLE001 - best-effort
+                return
+            if not dismissed:
+                return
+            time.sleep(0.15)
 
     def close_app(self, app):
         blocked = self._guard()

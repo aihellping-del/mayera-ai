@@ -841,3 +841,28 @@ extracted fresh, ran its original root updater.py and landed on
 (/health ok) - the oldest shipped version reaches the new
 structure in one update. Old mayera/ + static/ folders remain as
 harmless leftovers on such installs; nothing imports them.
+
+--- v3.17.1 addendum (2026-11-10): NOTEPAD STALE-TAB DIALOG FIX ---
+His screenshot: he told JARVIS to open (Notepad), and Windows 11
+Notepad popped 'The system cannot find the path specified.' Root
+cause is Notepad's own session restore: it reopens the previous
+session's tabs, and one tab's file no longer exists where it was.
+The box is modal, so it also would have eaten JARVIS's typed text.
+JARVIS's launch path itself was verified clean (allowlist ->
+cmd /c start "" notepad, no file argument).
+Fix in actions/pc_control.py: open_app now runs a surgical
+dismiss pass (before the focus wait, and again if focus fails):
+_default_dialog_dismisser only touches a standard #32770 dialog
+owned by the app's process whose static text contains 'cannot
+find the path' - then presses Enter (the OK default). Save prompts
+and all other dialogs are never touched. Multiple queued stale
+tabs are dismissed in a loop (3 s cap); the normal no-dialog case
+costs one quick check. The user-side permanent cure (Notepad
+Settings -> 'When Notepad starts' -> 'Open a new window') was
+given to him as a single step.
+Tests: 8/8 new (~/workspace/test_notepad_dialog.py - dialog before
+focus, no-dialog single check, late dialog + retry focus, three
+queued dialogs, dismisser failure swallowed) + regressions 15/15 +
+42/42 + 12/12 + 14/14 + 8/8 + 49/49 + 13/13 + 31/31 + 36/36. The
+ctypes dialog hunt itself can only run on his Windows PC - same
+standing limit as all PC-control effectors.
