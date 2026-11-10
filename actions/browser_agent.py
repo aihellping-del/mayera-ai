@@ -242,15 +242,46 @@ class _CdpPage:
             return False
 
 
-def _fetch_page_ws_url(port):
-    """The page target's websocket URL from the /json/list API."""
+def _fetch_page_ws_url(port, url_part=None):
+    """The page target's websocket URL from the /json/list API.
+    url_part narrows to the tab whose URL contains it (v3.25 -
+    the WhatsApp tab lives next to the research tab)."""
     with urllib.request.urlopen(
             f"http://127.0.0.1:{port}/json/list", timeout=3) as resp:
         targets = json.loads(resp.read().decode("utf-8", "replace"))
     for target in targets:
-        if target.get("type") == "page" and target.get("webSocketDebuggerUrl"):
+        if target.get("type") != "page":
+            continue
+        if url_part and url_part not in (target.get("url") or ""):
+            continue
+        if target.get("webSocketDebuggerUrl"):
             return target["webSocketDebuggerUrl"]
     return None
+
+
+def _fetch_browser_ws_url(port):
+    """The browser-level websocket URL from /json/version."""
+    with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/json/version", timeout=3) as resp:
+        info = json.loads(resp.read().decode("utf-8", "replace"))
+    return info.get("webSocketDebuggerUrl")
+
+
+async def _create_tab(port, url):
+    """Ask the browser (browser-level CDP) to open a new tab."""
+    import websockets
+    browser_ws = await asyncio.to_thread(_fetch_browser_ws_url, port)
+    if not browser_ws:
+        raise RuntimeError("browser control nahi mila")
+    async with websockets.connect(browser_ws) as ws:
+        await ws.send(json.dumps({
+            "id": 1, "method": "Target.createTarget",
+            "params": {"url": url}}))
+        raw = await asyncio.wait_for(ws.recv(), timeout=10)
+        msg = json.loads(raw)
+        if "error" in msg:
+            raise RuntimeError(str(msg["error"])[:160])
+    return True
 
 
 class BrowserAgent:
@@ -265,6 +296,7 @@ class BrowserAgent:
         self._page = None
         self._proc = None
         self._last_results = []
+        self._tabs = {}  # url_part -> _CdpPage (v3.25, WhatsApp tab)
 
     # ------------------------------------------------------------------
     async def _ensure_page(self):
@@ -296,6 +328,35 @@ class BrowserAgent:
             raise RuntimeError("browser khula par control nahi mila")
         self._page = await _CdpPage(ws_url).connect()
         return self._page
+
+    async def open_tab(self, url, url_part):
+        """A second tab in JARVIS's browser (v3.25 - WhatsApp Web
+        lives here, next to the research tab). Cached per url_part;
+        reopened if the user closed it."""
+        page = self._tabs.get(url_part)
+        if page is not None and await page.alive():
+            return page
+        if self._page_factory is not None:
+            page = await self._page_factory()
+            self._tabs[url_part] = page
+            return page
+        await self._ensure_page()  # the browser process must run
+        await _create_tab(self._port, url)
+        ws_url = None
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline and not ws_url:
+            try:
+                ws_url = await asyncio.to_thread(
+                    _fetch_page_ws_url, self._port, url_part)
+            except Exception:  # noqa: BLE001 - tab still opening
+                ws_url = None
+            if not ws_url:
+                await asyncio.sleep(0.4)
+        if not ws_url:
+            raise RuntimeError("naya tab khula par control nahi mila")
+        page = await _CdpPage(ws_url).connect()
+        self._tabs[url_part] = page
+        return page
 
     # ------------------------------------------------------------------
     async def search(self, query):

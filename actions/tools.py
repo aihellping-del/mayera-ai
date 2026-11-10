@@ -689,6 +689,30 @@ def function_declarations():
                 type=types.Type.OBJECT, properties={}),
         ),
         types.FunctionDeclaration(
+            name="whatsapp_send",
+            description=(
+                "Send a WhatsApp message from the user's own "
+                "WhatsApp (in JARVIS's browser) to ONE contact he "
+                "names, with the exact message he dictates. The "
+                "tool itself first shows an on-screen Haan/Nahi "
+                "card with the contact and full text - only his "
+                "tap can send it; a 'cancelled' result means NOT "
+                "sent, never argue. If it returns needs_login, "
+                "tell him to scan the QR in JARVIS's browser with "
+                "his phone (one time only)."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "contact": types.Schema(
+                        type=types.Type.STRING,
+                        description="Contact name exactly as saved in his WhatsApp."),
+                    "message": types.Schema(
+                        type=types.Type.STRING,
+                        description="The message text he dictated.")},
+                required=["contact", "message"]),
+        ),
+        types.FunctionDeclaration(
             name="click_on_screen",
             description=(
                 "Look at the user's screen, FIND the named element "
@@ -750,7 +774,8 @@ _BROWSER_TOOLS = {"browser_search", "browser_research",
 
 class ToolExecutor:
     def __init__(self, store, opener=None, pc=None, yt=None, vision=None,
-                 plugins=None, files=None, confirm=None, browser=None):
+                 plugins=None, files=None, confirm=None, browser=None,
+                 whatsapp=None):
         self._store = store
         self._opener = opener or webbrowser.open
         self._pc = pc  # PcController (v3.1 PC Control pack) or None
@@ -759,6 +784,7 @@ class ToolExecutor:
         self._files = files  # FileOps (v3.17) or None
         self._confirm = confirm  # ConfirmGate (v3.17) or None
         self._browser = browser  # BrowserAgent (v3.20) or None
+        self._whatsapp = whatsapp  # WhatsAppMessenger (v3.25) or None
         if plugins is None:
             try:
                 from plugins import loader as plugins_loader
@@ -781,6 +807,8 @@ class ToolExecutor:
                     self._run_plugin, name, args)
             if name == "forget_memory":
                 return self._forget(args.get("query", ""))
+            if name == "whatsapp_send":
+                return await self._whatsapp_action(args)
             if name in _BROWSER_TOOLS:
                 # The browser agent is async (DevTools Protocol) -
                 # await it directly; tool batches already run as
@@ -934,6 +962,21 @@ class ToolExecutor:
         except Exception as exc:  # noqa: BLE001 - reported to the model
             return {"status": "error",
                     "message": f"plugin {name}: {exc.__class__.__name__}"}
+
+    async def _whatsapp_action(self, args):
+        """whatsapp_send (v3.25): the messenger enforces the
+        confirm card itself; here we only supply the gate."""
+        if self._whatsapp is None:
+            return {"status": "error", "message": "whatsapp unavailable"}
+
+        async def _confirm_cb(question):
+            if self._confirm is None:
+                return False
+            return await asyncio.to_thread(self._confirm.ask, question)
+
+        return await self._whatsapp.send_message(
+            args.get("contact", ""), args.get("message", ""),
+            confirm=_confirm_cb)
 
     async def _browser_action(self, name, args):
         if self._browser is None:

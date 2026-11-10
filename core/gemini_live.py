@@ -749,6 +749,7 @@ class GeminiLiveSession:
         "browser_open_result": "Result khol raha hai...",
         "browser_read_page": "Page padh raha hai...",
         "click_on_screen": "Screen par dhoondh kar click kar raha hai...",
+        "whatsapp_send": "WhatsApp khol raha hai...",
     }
 
     def _spawn_tool_calls(self, function_calls):

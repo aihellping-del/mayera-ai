@@ -1038,3 +1038,28 @@ trimmed 2600 -> 1800 chars for a faster spoken summary.
 Tests: 11/11 new (~/workspace/test_visible_mouse.py - glide path
 shape + ordering, centre-before-wheel for both scroll tools,
 browser point glide) + every regression + server smoke.
+
+--- v3.25.0 addendum (2026-11-10): WHATSAPP SEND (HIS WHATSAPP,
+HIS WORDS, HIS HAAN) ---
+User: 'mai use apne WhatsApp se kisi ko message bhi karwana
+chahta hu'. Built actions/whatsapp.py on the v3.20 browser:
+WhatsApp Web in its own tab (BrowserAgent.open_tab now creates a
+second CDP target via Target.createTarget and connects through
+/json/list by URL). One-time QR login is done by the user with
+his phone in that window (Linked Devices) - never bypassed,
+never handled by JARVIS; the profile keeps him logged in.
+Flow enforced in code: state check (needs_login until QR done)
+-> search contact by name -> open chat -> type the dictated
+message -> VERIFY the box holds the exact text -> confirmation
+callback (the UI Haan/Nahi card with contact + full message)
+-> only then the send click (Enter fallback) -> verify the
+bubble appeared before claiming done. Denied/no approver = the
+typed text is cleared and NOTHING is sent. One contact per call;
+no bulk/list machinery exists in the module.
+Honest limit: WhatsApp Web's DOM shifts often; each step has
+fallback selectors and a specific error, so his first live run's
+[tool] log will show exactly where any tuning is needed.
+Tests: 10/10 new (~/workspace/test_whatsapp.py - QR state,
+no-approver cancel, gate deny/allow with exact-text question,
+unknown contact, executor routing, 44 declarations) + all
+regressions (decl counts 43 -> 44 in six suites) + smoke.
