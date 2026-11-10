@@ -251,6 +251,34 @@ def _default_focuser(image, timeout):
     return False
 
 
+def _make_fast_capturer():
+    """Fast in-memory screen capture via mss + Pillow (v3.22).
+
+    The PowerShell screenshot path costs ~1 s per capture on his
+    laptop, and screen vision pays it on EVERY look/click (his log:
+    click_on_screen took 7.9 s end to end). mss grabs in tens of
+    milliseconds. Both packages are optional (requirements since
+    v3.13); if either is missing this returns None and the proven
+    PowerShell path is used instead.
+    """
+    try:
+        import mss
+        from PIL import Image
+    except Exception:  # noqa: BLE001 - optional dependency
+        return None
+
+    def _grab():
+        import io
+        with mss.mss() as sct:
+            shot = sct.grab(sct.monitors[1])
+        img = Image.frombytes("RGB", shot.size, shot.rgb)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+
+    return _grab
+
+
 def _default_dialog_dismisser(image):
     """Dismiss ONE stale-session error dialog of the given app, if
     it is showing (v3.17.1). Windows 11 Notepad restores the last
@@ -504,7 +532,9 @@ class PcController:
         self._keyer = keyer or _default_keyer
         self._focuser = focuser or _default_focuser
         self._sleep = sleeper or time.sleep
-        self._bytes_capturer = bytes_capturer
+        self._bytes_capturer = (bytes_capturer
+                                if bytes_capturer is not None
+                                else _make_fast_capturer())
         self._title_focuser = title_focuser or _default_title_focuser
         self._clicker_at = clicker_at or _default_clicker_at
         self._dialog_dismisser = (dialog_dismisser
@@ -784,8 +814,12 @@ class PcController:
         if blocked:
             return blocked
         if self._bytes_capturer is not None:
-            data = self._bytes_capturer()
-            return {"status": "ok", "png": data}
+            try:
+                data = self._bytes_capturer()
+                if data:
+                    return {"status": "ok", "png": data}
+            except Exception:  # noqa: BLE001 - fall through to the
+                pass             # proven PowerShell path below
         fd, tmp = tempfile.mkstemp(suffix=".png")
         os.close(fd)
         try:

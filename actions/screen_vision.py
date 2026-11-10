@@ -50,6 +50,28 @@ _DESCRIBE_PROMPT = (
 )
 
 
+def _shrink_for_vision(png_bytes):
+    """(bytes, mime) made cheap to send (v3.22): a full-screen PNG
+    from his laptop is several MB - uploading and reading it was
+    most of click_on_screen's 7.9 s. Downscale to at most 1280 px
+    wide and send JPEG instead. The locator's 0-1000 coordinates
+    are relative, so pointing accuracy is unaffected. Without
+    Pillow (optional dep) the original PNG goes as before."""
+    try:
+        import io
+
+        from PIL import Image
+        img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+        if img.width > 1280:
+            img = img.resize(
+                (1280, max(1, int(img.height * 1280 / img.width))))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=80)
+        return buf.getvalue(), "image/jpeg"
+    except Exception:  # noqa: BLE001 - Pillow optional
+        return png_bytes, "image/png"
+
+
 def _default_describer(png_bytes, question):
     """One Gemini vision call. Returns the description text."""
     from google import genai
@@ -65,10 +87,11 @@ def _default_describer(png_bytes, question):
     prompt = _DESCRIBE_PROMPT
     if question:
         prompt += f"\nThe user is asking about: {question}"
+    data, mime = _shrink_for_vision(png_bytes)
     response = client.models.generate_content(
         model=VISION_MODEL,
         contents=[
-            types.Part.from_bytes(data=png_bytes, mime_type="image/png"),
+            types.Part.from_bytes(data=data, mime_type=mime),
             prompt,
         ],
     )
@@ -79,7 +102,12 @@ _LOCATE_PROMPT = (
     "You are the eyes and pointing finger of a voice assistant. "
     "Look at this screenshot of the user's own PC screen and find "
     "the ONE visible UI element (link, button, tab, menu item, "
-    "icon) whose text or label matches: \"{target}\". "
+    "icon) that matches: \"{target}\". The match may be PARTIAL - "
+    "the element's text may merely CONTAIN these words (a button "
+    "reading 'Google Search' matches 'Search'), the words may be "
+    "in another language on the same button, or the words may "
+    "DESCRIBE the element (a '+' icon is a new-tab button, a "
+    "magnifier is search). "
     "Reply with ONLY a JSON object, no other words: "
     "{{\"x\": <0-1000>, \"y\": <0-1000>}} giving the CENTER of that "
     "element, where x and y are relative coordinates on a "
@@ -101,10 +129,11 @@ def _default_locator(png_bytes, target):
         api_key=api_key,
         http_options=types.HttpOptions(api_version="v1beta"),
     )
+    data, mime = _shrink_for_vision(png_bytes)
     response = client.models.generate_content(
         model=VISION_MODEL,
         contents=[
-            types.Part.from_bytes(data=png_bytes, mime_type="image/png"),
+            types.Part.from_bytes(data=data, mime_type=mime),
             _LOCATE_PROMPT.format(target=target),
         ],
     )

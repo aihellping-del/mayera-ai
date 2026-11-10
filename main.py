@@ -129,11 +129,13 @@ def _record_latency(seconds: float, end_wait=None):
     if len(latency_samples) > 50:
         del latency_samples[:-50]
     avg = sum(latency_samples) / len(latency_samples)
-    # v3.19: the second number splits the wait - time from when his
-    # microphone went fully quiet (last chunk of any kind) to the
-    # first reply sound. Felt minus this = his own trailing silence
-    # and trailing quiet chunks, which no model can answer inside.
-    seg = (f", mic band -> jawab: {end_wait:.2f}s"
+    # v3.22: the second number is the honest wait - from the moment
+    # he had clearly STOPPED speaking (the 0.6 s-of-quiet mark,
+    # voice_state['speech_end']) to the first reply sound. (v3.19's
+    # 'mic band' segment used the last chunk of ANY kind, but the
+    # mic streams silence chunks continuously, so it always read
+    # ~0.03 s - his 2026-11-10 screenshot proved it useless.)
+    seg = (f", chup -> jawab: {end_wait:.2f}s"
            if end_wait is not None else "")
     print(f"  [latency] Jawab ka pehla sound: {seconds:.2f}s{seg} "
           f"(average {avg:.2f}s, {len(latency_samples)} replies)",
@@ -157,7 +159,7 @@ async def send_ui_status(state: str, message: str = ""):
 # voice-activity state (drives 'thinking' face + proactive timing)
 voice_state = {"last_voice": 0.0, "last_ai": 0.0, "talking": False,
                "thinking_sent": False, "awaiting_reply": False,
-               "last_chunk": 0.0}
+               "last_chunk": 0.0, "speech_end": 0.0}
 
 # ---------------------------------------------------------------------------
 # Mood memory (v3.2): MAYERA "samajhti" hai - she notices how Golu
@@ -223,8 +225,8 @@ async def on_ai_audio(pcm_bytes: bytes):
         # First reply audio after Golu finished speaking: this gap is
         # the latency he actually feels. Measure it, once per turn.
         voice_state["awaiting_reply"] = False
-        end_wait = (now - voice_state["last_chunk"]
-                    if voice_state["last_chunk"] else None)
+        end_wait = (now - voice_state["speech_end"]
+                    if voice_state.get("speech_end") else None)
         _record_latency(now - voice_state["last_voice"], end_wait)
     voice_state["last_ai"] = now
     voice_state["thinking_sent"] = False
@@ -571,6 +573,7 @@ async def websocket_endpoint(ws: WebSocket):
                     # against last_voice (latency monitoring, v3.0).
                     voice_state["talking"] = False
                     voice_state["awaiting_reply"] = True
+                    voice_state["speech_end"] = time.monotonic()
                 if live_session is not None and not mic_muted:
                     await live_session.send_audio(chunk)
                 continue

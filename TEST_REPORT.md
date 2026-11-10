@@ -960,3 +960,32 @@ suites) + server smoke. Vision pointing accuracy is only
 provable on his PC with his key - first test: open his Chrome,
 say 'screen par jo Download dikha raha hai us par click karo'
 style sentence with a clearly visible label.
+
+--- v3.22.0 addendum (2026-11-10): SPEED + SCREEN-CLICK ROUND,
+FROM HIS REAL TERMINAL LOG ---
+His screenshot (15:31-15:36) proved: he IS on v3.21; browser_search
+WORKED (TradingView, done 1.6 s) and mouse_scroll/close_app are
+instant; but click_on_screen took 7.9 s and FAILED ('Search'
+screen par nahi dikha), one browser_search turn measured 13.12 s
+felt latency, plain replies 3.0-7.1 s, and the v3.19 'mic band ->
+jawab' segment read 0.01-0.05 s on every line - useless, because
+the mic streams silence chunks continuously so 'last chunk' is
+always ~now.
+Fixes: (1) screen capture is now mss-based when mss+Pillow are
+installed (they are, since his INSTALL re-run) - tens of ms
+instead of the ~1 s PowerShell path, which remains as fallback
+and is also the fallback if the fast capturer ever raises;
+(2) vision calls (describe + locate) now send a downscaled
+1280 px JPEG instead of a multi-MB full-screen PNG - the
+locator's relative 0-1000 coordinates are unaffected;
+(3) the locator prompt now accepts PARTIAL and descriptive
+matches ('Google Search' matches 'Search'; '+' = new tab;
+magnifier = search) and the instruction tells the Live model to
+pass the FULL on-screen label; (4) the latency segment is now
+'chup -> jawab' measured from voice_state.speech_end (stamped
+at the 0.6 s-of-quiet mark) - honest and decomposable.
+Not hidden from the user: plain-reply seconds that remain are
+model/network-side (his fast replies are 3.0 s; spikes ride on
+tool turns) - no client code can cut Google's generation time.
+Tests: 10/10 new (~/workspace/test_fast_vision.py) + all
+regressions + server smoke.
