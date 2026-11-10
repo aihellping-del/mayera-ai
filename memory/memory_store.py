@@ -68,6 +68,12 @@ class MemoryStore:
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY, value TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS reminders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    text TEXT NOT NULL,
+                    due_at REAL NOT NULL,
+                    done INTEGER NOT NULL DEFAULT 0
+                );
                 """
             )
             for k, v in DEFAULT_SETTINGS.items():
@@ -150,6 +156,52 @@ class MemoryStore:
         with self._lock, self._db:
             cur = self._db.execute("DELETE FROM memories")
             return cur.rowcount
+
+    # ------------------------------------------------------------------
+    # reminders (v3.17, Mark LVI port): spoken aloud by the watchdog
+    # when they come due while a session is live
+    # ------------------------------------------------------------------
+    def add_reminder(self, text, due_at):
+        with self._lock, self._db:
+            cur = self._db.execute(
+                "INSERT INTO reminders (text, due_at) VALUES (?, ?)",
+                ((text or "").strip(), float(due_at)))
+            return cur.lastrowid
+
+    def list_reminders(self, include_done=False):
+        sql = "SELECT id, text, due_at, done FROM reminders"
+        if not include_done:
+            sql += " WHERE done = 0"
+        sql += " ORDER BY due_at"
+        with self._lock:
+            rows = self._db.execute(sql).fetchall()
+        return [dict(r) for r in rows]
+
+    def due_reminders(self, now):
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT id, text, due_at FROM reminders "
+                "WHERE done = 0 AND due_at <= ? ORDER BY due_at",
+                (float(now),)).fetchall()
+        return [dict(r) for r in rows]
+
+    def mark_reminder_done(self, reminder_id):
+        with self._lock, self._db:
+            self._db.execute("UPDATE reminders SET done = 1 WHERE id = ?",
+                             (reminder_id,))
+
+    def cancel_reminder(self, query):
+        query = (query or "").strip().lower()
+        if not query:
+            return 0
+        with self._lock, self._db:
+            rows = self._db.execute(
+                "SELECT id, text FROM reminders WHERE done = 0").fetchall()
+            ids = [r["id"] for r in rows if query in r["text"].lower()]
+            for rid in ids:
+                self._db.execute(
+                    "UPDATE reminders SET done = 1 WHERE id = ?", (rid,))
+            return len(ids)
 
     # ------------------------------------------------------------------
     # conversation checkpoint

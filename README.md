@@ -169,3 +169,16 @@ development, what passed, and the short checklist to run once on your own PC
 - MAYERA runs fully on **your** PC with **your** API key; conversations go
   between your browser, this local server and Google's Gemini Live API.
 - Gemini Live free-tier limits apply to your key.
+
+---
+
+## Credits
+
+From v3.17, several features of JARVIS are adapted from **Mark LVI**
+by **FatihMakes** (licensed CC BY-NC 4.0 -
+https://creativecommons.org/licenses/by-nc/4.0/): the project
+folder structure, the shared undo stack, the UI-issued confirmation
+gate, file operations with recoverable trash, self-describing
+plugins, and the measured Gemini Live model ladder. Adaptations are
+reimplemented for this codebase; the Gemini Live engine, DPAPI key
+vault, memory store and auto-update are JARVIS's own.

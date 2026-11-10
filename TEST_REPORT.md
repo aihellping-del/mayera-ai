@@ -786,3 +786,58 @@ The transition proof (an OLD-layout install self-updating into the
 new folder tree via its own old updater) runs against the live repo
 right after this push, including from the user's own uploaded
 v2.5.0 ZIP - results appended below.
+
+--- v3.17.0 addendum (2026-11-10): MARK LVI PORT PACK (user picked A) ---
+The user uploaded Mark LVI (by FatihMakes, CC BY-NC 4.0), asked to
+install "everything" from it, then chose option A: port its best
+features into JARVIS, keeping JARVIS's engine, DPAPI key, memories
+and GitHub auto-update. Quick safety scan of the zip first: no
+exfil/webhook hosts, provider APIs only; its one weakness (API key
+in plaintext api_keys.json) was NOT imported - the DPAPI vault
+stays. Ported and adapted (reimplemented, attribution in README +
+AGENTS.md):
+(1) MODEL LADDER: gemini-3.1-flash-live-preview added as the lead
+rung (Mark's measured lead Live model; it fails fast if the key/
+region lacks it, and last_model memory means a bad rung costs one
+attempt once); the proven 12-2025 rung stays second.
+(2) core/undo.py: shared serialisable undo stack (depth 10).
+(3) core/confirm.py: ConfirmGate - irreversible actions need a
+token issued by the UI: the page shows a Haan/Nahi card, only the
+user's tap (POST /api/confirm) approves; timeout = NO; no UI = NO.
+(4) actions/file_ops.py: list/create folder/create file/write
+(append/overwrite)/read/move/copy/rename/find/disk + trash_file
+(recoverable ~/.jarvis_trash, gate-approved in the executor) -
+confined to the home tree, the install folder is off-limits, every
+success verified on disk before status "done" (Mark's outcome
+rule), every change registers its undo.
+(5) actions/weather.py: get_weather via Open-Meteo (no key).
+(6) Reminders: reminders table + set/list/cancel tools; the main
+watchdog speaks due reminders via a nudge and marks them done.
+(7) actions/sysinfo.py: get_system_info (disk, OS, cores; Windows
+battery + RAM via ctypes - no psutil dependency).
+(8) plugins/_template.py (loader skips it) + the loader no longer
+scans its own loader.py. Declarations 20 -> 36. Manifest 51 -> 56.
+Tests: 36/36 new (~/workspace/test_port_pack.py - ladder, file ops
+round-trips, undo write/move/trash, home/install/traversal safety,
+gate approve/timeout/no-UI, executor gate NO/YES, reminders due/
+cancel) + Playwright smoke (confirm card renders, tap Haan hides
+it, 0 JS errors) + regressions 12/12 + 14/14 + 15/15 + 8/8 + 49/49
++ 42/42 + 13/13 + 31/31 + Node 11/11 (declaration counts updated
+20 -> 36 in three suites).
+NOT ported (bigger projects, offered as next picks): the PyQt
+avatar + viseme lip-sync (his HUD is a browser - the viseme logic
+ports to canvas as its own project), wake word (Mark's uses a
+PC-side mic via sounddevice; JARVIS's mic lives in the browser, so
+an honest port needs a PC-side listener module), the providers/
+engine swap (Whisper/Piper/Ollama STT-LLM-TTS pipeline), the phone
+dashboard with QR pairing, and the community plugins (WhatsApp/
+Gmail/etc. - several cross JARVIS's standing no-send rule and need
+their own review).
+--- v3.16.0 transition results (appended at v3.17 build time) ---
+After the v3.16 push: (a) a v3.15-layout install self-updated to
+3.16.0, sentinels identical; (b) the user's OWN uploaded v2.5.0 ZIP
+extracted fresh, ran its original root updater.py and landed on
+3.16.0 with the new folder tree, sentinels identical, and BOOTED
+(/health ok) - the oldest shipped version reaches the new
+structure in one update. Old mayera/ + static/ folders remain as
+harmless leftovers on such installs; nothing imports them.

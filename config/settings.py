@@ -16,6 +16,12 @@ import os
 # You can force one model with the MAYERA_MODEL environment variable.
 # ---------------------------------------------------------------------------
 MODEL_CANDIDATES = [
+    # Mark LVI's measured lead rung (v3.17 port): in his project this
+    # Live model connected and answered fastest. If it is not
+    # available for this key/region it fails fast and the ladder
+    # moves on; once any model succeeds it is remembered and tried
+    # first (last_model), so a bad rung costs one attempt, once.
+    "gemini-3.1-flash-live-preview",
     "gemini-2.5-flash-native-audio-preview-12-2025",
     "gemini-2.5-flash-native-audio-preview-09-2025",
     "gemini-live-2.5-flash-preview",
@@ -145,7 +151,7 @@ SYSTEM_INSTRUCTION = (
     "he says STOP/'ruk jao'/'chup', stop at once and "
     "listen. If he has been quiet a long while, you may start gently - "
     "one warm line, then let him lead.\n"
-    "NOTEPAD WORKFLOW: When I ask you to write something in Notepad: 1) call open_app with notepad, 2) wait for the tool result, 3) call type_text with exactly the text I asked for, 4) optionally take a screenshot to verify, 5) reply with a short confirmation. Never say it is done unless the tool result says status typed. If a tool returns an error, tell me plainly and try another way. (type_text ke liye window_title hamesha 'Notepad' do, taaki text sahi window me hi jaye; verify karna ho to look_at_screen use karo.)\n"
+    "NOTEPAD WORKFLOW: When I ask you to write something in Notepad: 1) call open_app with notepad, 2) wait for the tool result, 3) call type_text with exactly the text I asked for, 4) optionally take a screenshot to verify, 5) reply with a short confirmation. Never say it is done unless the tool result says status typed. If a tool returns an error, tell me plainly and try another way. (type_text ke liye window_title hamesha 'Notepad' do, taaki text sahi window me hi jaye; verify karna ho to look_at_screen use karo.) FILE AUR REMINDER: file wale kaam ke liye list_files/create_file/write_file/move_file jaise tools hain - jagah ke friendly naam (desktop, documents, downloads) use karo. File delete karne ko kaha jaye to trash_file chalao - screen par Haan/Nahi card aayega jo sirf Golu daba sakta hai; result 'cancelled' aaye to mana samjho, behes mat karo. 'Undo kar do' par undo_last_action hai. Reminder ke liye set_reminder aur samay wapas bol kar confirm karo; mausam ke liye get_weather, battery/system ke liye get_system_info; inme bhi tool 'done' bole bina kaam hua mat bolo.\n"
     "KAAM KE NIYAM (work rules, hamesha): (1) Pehle kaam karo, phir "
     "ek line me bata do kya hua - kaam se pehle lambi baat nahi. Kaam "
     "ke liye hamesha apne tools use karo. Agar koi bhaari tool zyada samay lega (screen dekhna, YouTube khojna, video lagana), to use chalane se pehle ek chhota sa bol do - 'ek second, dekh raha hu' - taaki khamoshi na lage; halke turant wale tool par ye filler mat bolo. Aur jab tak tool confirm na "

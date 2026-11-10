@@ -123,6 +123,7 @@ function connectWS() {
       if (msg.type === "status") setState(msg.state, msg.message);
       else if (msg.type === "interrupted") flushPlayback();
       else if (msg.type === "ptt") pttHeld = !!msg.active;
+      else if (msg.type === "confirm") showConfirm(msg.id, msg.text);
     } else {
       playAiAudio(ev.data);
     }
@@ -572,6 +573,31 @@ $("setSpeakerDevice").addEventListener("change", () => {
   localStorage.setItem("jarvis_speaker_device", $("setSpeakerDevice").value);
   if (playCtx) ensurePlayCtx();
 });
+
+/* Real confirmation (v3.17, Mark LVI's rule): irreversible actions
+   wait for THIS card. The model asked; only your tap answers. No
+   tap within the server's timeout counts as Nahi. */
+let confirmId = null;
+function showConfirm(id, text) {
+  confirmId = id;
+  $("confirmText").textContent = text || "Pakka karu?";
+  $("confirmBox").style.display = "flex";
+}
+async function answerConfirm(approved) {
+  $("confirmBox").style.display = "none";
+  if (!confirmId) return;
+  const id = confirmId;
+  confirmId = null;
+  try {
+    await fetch("/api/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, approved }),
+    });
+  } catch {}
+}
+$("confirmYes").addEventListener("click", () => answerConfirm(true));
+$("confirmNo").addEventListener("click", () => answerConfirm(false));
 
 async function renderMemList() {
   const box = $("memList");

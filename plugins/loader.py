@@ -93,8 +93,8 @@ def discover(base_dir=None, force=False):
         folder = Path(base_dir) if base_dir else default_plugins_dir()
         if folder.is_dir():
             for path in sorted(folder.glob("*.py")):
-                if path.name.startswith("_"):
-                    continue
+                if path.name.startswith("_") or path.name == "loader.py":
+                    continue  # template/shared files and the loader itself
                 try:
                     mod_name = f"jarvis_plugin_{path.stem}"
                     spec = importlib.util.spec_from_file_location(

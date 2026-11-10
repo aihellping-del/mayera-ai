@@ -138,6 +138,17 @@
 </aside>
 <div class="scrim" id="scrim"></div>
 
+<!-- Confirmation card (v3.17): only the user's own tap here can
+     approve a gated action - the model cannot press this. -->
+<div id="confirmBox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:60;align-items:center;justify-content:center">
+  <div style="background:#12141c;border:1px solid #2b3040;border-radius:14px;padding:22px;max-width:340px;width:88%;text-align:center;color:#e8eaf2;font-family:inherit">
+    <div style="font-size:30px">⚠️</div>
+    <p id="confirmText" style="margin:10px 0 18px;line-height:1.5"></p>
+    <button id="confirmYes" style="background:#1f9d55;color:#fff;border:0;border-radius:9px;padding:10px 22px;margin-right:10px;cursor:pointer;font-size:15px">Haan, kar do</button>
+    <button id="confirmNo" style="background:#3a3f4f;color:#fff;border:0;border-radius:9px;padding:10px 22px;cursor:pointer;font-size:15px">Nahi</button>
+  </div>
+</div>
+
 <script src="/static/app.js"></script>
 <script src="/static/particles.js"></script>
 <script src="/static/flow.js"></script>

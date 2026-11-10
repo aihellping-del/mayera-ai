@@ -399,6 +399,222 @@ def function_declarations():
             ),
         ),
         types.FunctionDeclaration(
+            name="list_files",
+            description=(
+                "List files and folders at a place ('desktop par kya "
+                "hai?'). Path can be a friendly name (desktop, "
+                "documents, downloads, pictures, music, videos, home) "
+                "or a folder path inside the user's home."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={"path": types.Schema(
+                    type=types.Type.STRING,
+                    description="Friendly place name or folder path.")},
+                required=["path"]),
+        ),
+        types.FunctionDeclaration(
+            name="create_folder",
+            description="Create a new folder at a friendly place.",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "path": types.Schema(type=types.Type.STRING,
+                                         description="Friendly place, e.g. desktop."),
+                    "name": types.Schema(type=types.Type.STRING,
+                                         description="New folder name.")},
+                required=["path", "name"]),
+        ),
+        types.FunctionDeclaration(
+            name="create_file",
+            description=(
+                "Create a new text file with optional starting "
+                "content. Fails honestly if the name already exists."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "path": types.Schema(type=types.Type.STRING,
+                                         description="Friendly place, e.g. documents."),
+                    "name": types.Schema(type=types.Type.STRING,
+                                         description="File name with extension, e.g. note.txt."),
+                    "content": types.Schema(type=types.Type.STRING,
+                                            description="Starting text (optional).")},
+                required=["path", "name"]),
+        ),
+        types.FunctionDeclaration(
+            name="write_file",
+            description=(
+                "Write text into an existing or new file (overwrite, "
+                "or append=true to add at the end). The previous "
+                "content is kept on the undo stack."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "path": types.Schema(type=types.Type.STRING,
+                                         description="Friendly place."),
+                    "name": types.Schema(type=types.Type.STRING,
+                                         description="File name."),
+                    "content": types.Schema(type=types.Type.STRING,
+                                            description="Text to write."),
+                    "append": types.Schema(type=types.Type.BOOLEAN,
+                                           description="Add at end instead of overwriting.")},
+                required=["path", "name", "content"]),
+        ),
+        types.FunctionDeclaration(
+            name="read_file",
+            description=(
+                "Read a text file's contents (.txt/.md/.log/.json/"
+                ".csv) so you can summarise or discuss it."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "path": types.Schema(type=types.Type.STRING,
+                                         description="Friendly place."),
+                    "name": types.Schema(type=types.Type.STRING,
+                                         description="File name.")},
+                required=["path", "name"]),
+        ),
+        types.FunctionDeclaration(
+            name="move_file",
+            description="Move a file to another friendly place.",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "path": types.Schema(type=types.Type.STRING,
+                                         description="Where the file is now."),
+                    "name": types.Schema(type=types.Type.STRING,
+                                         description="File name."),
+                    "destination": types.Schema(type=types.Type.STRING,
+                                                description="Friendly destination place.")},
+                required=["path", "name", "destination"]),
+        ),
+        types.FunctionDeclaration(
+            name="copy_file",
+            description="Copy a file to another friendly place.",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "path": types.Schema(type=types.Type.STRING,
+                                         description="Where the file is now."),
+                    "name": types.Schema(type=types.Type.STRING,
+                                         description="File name."),
+                    "destination": types.Schema(type=types.Type.STRING,
+                                                description="Friendly destination place.")},
+                required=["path", "name", "destination"]),
+        ),
+        types.FunctionDeclaration(
+            name="rename_file",
+            description="Rename a file or folder.",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "path": types.Schema(type=types.Type.STRING,
+                                         description="Friendly place it is in."),
+                    "name": types.Schema(type=types.Type.STRING,
+                                         description="Current name."),
+                    "new_name": types.Schema(type=types.Type.STRING,
+                                             description="New name.")},
+                required=["path", "name", "new_name"]),
+        ),
+        types.FunctionDeclaration(
+            name="trash_file",
+            description=(
+                "Move a file to the recoverable trash (.jarvis_trash "
+                "in home). This ALWAYS asks the user first with an "
+                "on-screen Haan/Nahi card that only the user can tap "
+                "- you cannot approve it yourself, and a timeout "
+                "means NO. Use for 'delete kar do' requests."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "path": types.Schema(type=types.Type.STRING,
+                                         description="Friendly place."),
+                    "name": types.Schema(type=types.Type.STRING,
+                                         description="File name.")},
+                required=["path", "name"]),
+        ),
+        types.FunctionDeclaration(
+            name="find_files",
+            description="Find files by part of their name under a place.",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "name_part": types.Schema(type=types.Type.STRING,
+                                              description="Part of the file name to search."),
+                    "path": types.Schema(type=types.Type.STRING,
+                                         description="Friendly place to search under.")},
+                required=["name_part"]),
+        ),
+        types.FunctionDeclaration(
+            name="undo_last_action",
+            description=(
+                "Undo the last reversible change JARVIS made (file "
+                "move/rename/create/write/trash, when the user says "
+                "'undo kar do', 'galti ho gayi', 'wapas kar do')."
+            ),
+            parameters=types.Schema(type=types.Type.OBJECT, properties={}),
+        ),
+        types.FunctionDeclaration(
+            name="get_weather",
+            description=(
+                "Live weather for a city ('mausam kaisa hai?'). "
+                "Returns current temperature, feels-like, humidity, "
+                "wind, condition and today's high/low."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={"city": types.Schema(
+                    type=types.Type.STRING,
+                    description="City name, e.g. Patna, Delhi.")},
+                required=["city"]),
+        ),
+        types.FunctionDeclaration(
+            name="set_reminder",
+            description=(
+                "Set a reminder JARVIS will SPEAK aloud when due "
+                "(while JARVIS is running). Give minutes_from_now OR "
+                "at_time ('18:30'). Confirm the time back to the user."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "text": types.Schema(type=types.Type.STRING,
+                                         description="What to remind about."),
+                    "minutes_from_now": types.Schema(type=types.Type.INTEGER,
+                                                     description="Minutes from now (optional)."),
+                    "at_time": types.Schema(type=types.Type.STRING,
+                                            description="Clock time today/tomorrow, 'HH:MM' (optional).")},
+                required=["text"]),
+        ),
+        types.FunctionDeclaration(
+            name="list_reminders",
+            description="List the user's pending reminders.",
+            parameters=types.Schema(type=types.Type.OBJECT, properties={}),
+        ),
+        types.FunctionDeclaration(
+            name="cancel_reminder",
+            description="Cancel pending reminders matching some words.",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={"query": types.Schema(
+                    type=types.Type.STRING,
+                    description="Words matching the reminder text.")},
+                required=["query"]),
+        ),
+        types.FunctionDeclaration(
+            name="get_system_info",
+            description=(
+                "The computer's health: OS, CPU cores, disk space, "
+                "and on Windows the battery percent and RAM use "
+                "('battery kitni hai?', 'system kaisa hai?')."
+            ),
+            parameters=types.Schema(type=types.Type.OBJECT, properties={}),
+        ),
+        types.FunctionDeclaration(
             name="open_website",
             description=(
                 "Open a website in the user's default browser, e.g. when "
@@ -430,15 +646,22 @@ def function_declarations():
 
 _URL_OK = re.compile(r"^(https?://)?[A-Za-z0-9.\-]+\.[A-Za-z]{2,}(/\S*)?$")
 
+# v3.17 (Mark LVI port pack)
+_FILE_TOOLS = {"list_files", "create_folder", "create_file",
+               "write_file", "read_file", "move_file", "copy_file",
+               "rename_file", "trash_file", "find_files"}
+
 
 class ToolExecutor:
     def __init__(self, store, opener=None, pc=None, yt=None, vision=None,
-                 plugins=None):
+                 plugins=None, files=None, confirm=None):
         self._store = store
         self._opener = opener or webbrowser.open
         self._pc = pc  # PcController (v3.1 PC Control pack) or None
         self._yt = yt  # YoutubePlayer (v3.4) or None
         self._vision = vision  # ScreenVision (v3.12) or None
+        self._files = files  # FileOps (v3.17) or None
+        self._confirm = confirm  # ConfirmGate (v3.17) or None
         if plugins is None:
             try:
                 from plugins import loader as plugins_loader
@@ -461,6 +684,13 @@ class ToolExecutor:
                     self._run_plugin, name, args)
             if name == "forget_memory":
                 return self._forget(args.get("query", ""))
+            if name in _FILE_TOOLS or name in ("get_weather",
+                                               "get_system_info",
+                                               "set_reminder",
+                                               "list_reminders",
+                                               "cancel_reminder",
+                                               "undo_last_action"):
+                return await self._v317(name, args)
             if name == "get_current_time":
                 now = datetime.datetime.now()
                 return {
@@ -564,6 +794,87 @@ class ToolExecutor:
         except Exception as exc:  # noqa: BLE001 - reported to the model
             return {"status": "error",
                     "message": f"plugin {name}: {exc.__class__.__name__}"}
+
+    async def _v317(self, name, args):
+        """v3.17 port pack routing: file kaam, weather, reminders,
+        system info, undo. File ops run in a thread (disk IO)."""
+        import datetime as _dt
+
+        from actions import sysinfo as sysinfo_mod
+        from actions import weather as weather_mod
+        from core import undo as undo_mod
+
+        if name == "get_weather":
+            return await asyncio.to_thread(
+                weather_mod.get_weather, args.get("city", ""))
+        if name == "get_system_info":
+            return await asyncio.to_thread(sysinfo_mod.get_system_info)
+        if name == "set_reminder":
+            text = (args.get("text") or "").strip()
+            if not text:
+                return {"status": "error", "message": "reminder text chahiye"}
+            now = _dt.datetime.now()
+            due = None
+            mins = args.get("minutes_from_now")
+            if isinstance(mins, (int, float)) and mins > 0:
+                due = now + _dt.timedelta(minutes=float(mins))
+            elif args.get("at_time"):
+                try:
+                    hh, mm = str(args["at_time"]).split(":")[:2]
+                    due = now.replace(hour=int(hh), minute=int(mm),
+                                      second=0, microsecond=0)
+                    if due <= now:
+                        due += _dt.timedelta(days=1)
+                except (ValueError, TypeError):
+                    return {"status": "error",
+                            "message": "time samajh nahi aaya (HH:MM do)"}
+            if due is None:
+                return {"status": "error",
+                        "message": "kab yaad dilana hai, woh nahi mila"}
+            rid = self._store.add_reminder(text, due.timestamp())
+            return {"status": "done", "verified": True, "id": rid,
+                    "due_at": due.strftime("%d %b, %I:%M %p")}
+        if name == "list_reminders":
+            rows = self._store.list_reminders()
+            return {"status": "done", "count": len(rows),
+                    "reminders": [
+                        {"text": r["text"],
+                         "due_at": _dt.datetime.fromtimestamp(
+                             r["due_at"]).strftime("%d %b, %I:%M %p")}
+                        for r in rows]}
+        if name == "cancel_reminder":
+            n = self._store.cancel_reminder(args.get("query", ""))
+            return {"status": "done", "cancelled": n}
+        if name == "undo_last_action":
+            entry = undo_mod.pop_undo()
+            if entry is None:
+                return {"status": "error",
+                        "message": "undo karne ke liye kuch nahi hai"}
+            if self._files is None:
+                return {"status": "error",
+                        "message": "file system band hai"}
+            return await asyncio.to_thread(
+                self._files.execute_undo, entry)
+        # file tools
+        if self._files is None:
+            return {"status": "error", "message": "file system band hai"}
+        f = self._files
+        if name == "trash_file":
+            # Mark's rule: the token comes from the UI, not the
+            # model. No gate / no tap = no trash, ever.
+            if self._confirm is None:
+                return {"status": "error",
+                        "message": "confirmation gate band hai"}
+            label = f"{args.get('path', '')}/{args.get('name', '')}"
+            ok = await self._confirm.ask(
+                f"Is file ko trash me bhej du? {label}")
+            if not ok:
+                return {"status": "cancelled",
+                        "message": "user ne Haan nahi bola - trash nahi hua"}
+        method = getattr(f, name)
+        call_args = {k: v for k, v in args.items()}
+        return await asyncio.to_thread(
+            lambda: method(**call_args))
 
     def _forget(self, query):
         count = self._store.delete_matching(query)

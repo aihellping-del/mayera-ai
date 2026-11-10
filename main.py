@@ -76,9 +76,26 @@ manager = ConnectionManager()
 start_lock = asyncio.Lock()
 store = MemoryStore()
 _pc = PcController()
+
+# v3.17 (Mark LVI port): file kaam + the UI-issued confirmation
+# gate. The gate's notify is attached below once `manager` exists;
+# a trash_file call can only proceed on the user's own tap.
+from actions.file_ops import FileOps  # noqa: E402
+from core.confirm import ConfirmGate  # noqa: E402
+
+confirm_gate = ConfirmGate()
+
+
+async def _confirm_notify(cid, question):
+    await manager.send_json(
+        {"type": "confirm", "id": cid, "text": question})
+
+
+confirm_gate.notify = _confirm_notify
 tool_executor = ToolExecutor(
     store, pc=_pc, yt=YoutubePlayer(),
     vision=ScreenVision(pc=_pc),  # v3.12: JARVIS can actually SEE the screen
+    files=FileOps(), confirm=confirm_gate,
 )
 watcher = ProactiveWatcher(store)
 
@@ -273,6 +290,16 @@ async def watchdog():
             print("  [stuck] 25s se koi jawab nahi aaya - "
                   "connection dead lagta hai", flush=True)
             session.force_reconnect("25s se koi jawab nahi")
+        # due reminders (v3.17): spoken once, then marked done.
+        # Checked on wall-clock time, independent of the proactive
+        # check-in's silence rules - a reminder is a promise.
+        for _rem in store.due_reminders(time.time()):
+            store.mark_reminder_done(_rem["id"])
+            print(f"  [reminder] {_rem['text']}", flush=True)
+            await session.nudge(
+                "REMINDER ka samay ho gaya hai. Golu ko abhi ye yaad "
+                f"dilao, ek chhoti line me: \"{_rem['text']}\". "
+                "Bas itna hi bolo, aur kuch mat jodo.")
         # proactive check-in
         if watcher.should_nudge():
             cp = store.get_checkpoint() if store.memory_enabled() else None
@@ -437,6 +464,15 @@ async def api_settings_post(payload: dict):
         if key in allowed:
             store.set_setting(key, value)
     return store.all_settings()
+
+
+@app.post("/api/confirm")
+async def api_confirm(payload: dict):
+    """The user's tap on the Haan/Nahi card (v3.17): this - and only
+    this - can approve a gated action like trash_file."""
+    cid = str((payload or {}).get("id", ""))
+    approved = bool((payload or {}).get("approved"))
+    return {"resolved": confirm_gate.resolve(cid, approved)}
 
 
 @app.post("/api/exit")
