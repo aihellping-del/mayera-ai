@@ -127,6 +127,10 @@ prewarm_task: asyncio.Task | None = None
 # between Golu finishing speaking (last loud mic chunk) and the first
 # reply audio arriving. Printed in the terminal, kept for /health.
 latency_samples: list[float] = []
+# v3.33: time-to-first-TOKEN samples (his speech end -> the
+# model's first output text), kept apart from time-to-first-
+# AUDIO so a slow model and a slow audio path are distinguishable.
+token_samples: list[float] = []
 
 # v3.14 performance dashboard counters (shown in /health and in the
 # Settings drawer's Diagnostics section).
@@ -135,7 +139,7 @@ audio_stats = {"mic_chunks_received": 0, "interruptions": 0,
 client_playback: dict = {}
 
 
-def _record_latency(seconds: float, end_wait=None):
+def _record_latency(seconds: float, end_wait=None, token_wait=None):
     latency_samples.append(seconds)
     if len(latency_samples) > 50:
         del latency_samples[:-50]
@@ -148,6 +152,14 @@ def _record_latency(seconds: float, end_wait=None):
     # ~0.03 s - his 2026-11-10 screenshot proved it useless.)
     seg = (f", chup -> jawab: {end_wait:.2f}s"
            if end_wait is not None else "")
+    # v3.33: first-TOKEN segment - if the shabd arrives fast but
+    # the sound late, the gap is audio-side; if the shabd itself
+    # is late, the wait is model/network-side. No more guessing.
+    if token_wait is not None:
+        token_samples.append(token_wait)
+        if len(token_samples) > 50:
+            del token_samples[:-50]
+        seg += f", chup -> pehla shabd: {token_wait:.2f}s"
     print(f"  [latency] Jawab ka pehla sound: {seconds:.2f}s{seg} "
           f"(average {avg:.2f}s, {len(latency_samples)} replies)",
           flush=True)
@@ -170,7 +182,8 @@ async def send_ui_status(state: str, message: str = ""):
 # voice-activity state (drives 'thinking' face + proactive timing)
 voice_state = {"last_voice": 0.0, "last_ai": 0.0, "talking": False,
                "thinking_sent": False, "awaiting_reply": False,
-               "last_chunk": 0.0, "speech_end": 0.0}
+               "last_chunk": 0.0, "speech_end": 0.0,
+               "first_token_at": 0.0}
 
 # ---------------------------------------------------------------------------
 # Mood memory (v3.2): MAYERA "samajhti" hai - she notices how Golu
@@ -230,6 +243,12 @@ def is_stop_command(text: str) -> bool:
 # ---------------------------------------------------------------------------
 # Gemini callbacks -> browser / brain
 # ---------------------------------------------------------------------------
+async def on_first_token():
+    """The model's first output text for this turn just arrived
+    (v3.33) - stamp it; on_ai_audio splits the two waits."""
+    voice_state["first_token_at"] = time.monotonic()
+
+
 async def on_ai_audio(pcm_bytes: bytes):
     now = time.monotonic()
     if voice_state["awaiting_reply"]:
@@ -238,7 +257,13 @@ async def on_ai_audio(pcm_bytes: bytes):
         voice_state["awaiting_reply"] = False
         end_wait = (now - voice_state["speech_end"]
                     if voice_state.get("speech_end") else None)
-        _record_latency(now - voice_state["last_voice"], end_wait)
+        _fta = voice_state.get("first_token_at") or 0.0
+        token_wait = (_fta - voice_state["speech_end"]
+                      if _fta and voice_state.get("speech_end")
+                      and _fta > voice_state["speech_end"] else None)
+        voice_state["first_token_at"] = 0.0
+        _record_latency(now - voice_state["last_voice"], end_wait,
+                        token_wait)
     voice_state["last_ai"] = now
     voice_state["thinking_sent"] = False
     watcher.mark_activity()
@@ -308,8 +333,14 @@ async def watchdog():
         # this long (his worst real tool turn was ~13s); the socket
         # has died silently, so reconnect instead of waiting forever.
         # awaiting_reply is cleared so this fires once per stuck turn.
+        # v3.33: while a tool batch is running the model is
+        # PROCESSING, not stuck - long tools (WhatsApp, research)
+        # legitimately hold a turn past 25 s with no audio, and
+        # reconnecting there killed healthy sessions mid-task.
+        # The per-tool timeouts (v3.32) bound those turns.
         if (voice_state["awaiting_reply"]
-                and now - voice_state["last_voice"] > 25):
+                and now - voice_state["last_voice"] > 25
+                and session.running_tool_tasks == 0):
             voice_state["awaiting_reply"] = False
             print("  [stuck] 25s se koi jawab nahi aaya - "
                   "connection dead lagta hai", flush=True)
@@ -420,6 +451,13 @@ async def health():
                              else "DISCONNECTED"),
         "reconnect_count": (live_session.reconnect_count
                             if live_session is not None else 0),
+        "session_rotations": (live_session.rotation_count
+                              if live_session is not None else 0),
+        "avg_first_token_s": (round(sum(token_samples)
+                                    / len(token_samples), 2)
+                              if token_samples else None),
+        "browser_ready": bool(_browser_agent is not None
+                              and _browser_agent.ready()),
         "last_reconnect_s": (live_session.last_reconnect_seconds
                              if live_session is not None else None),
         "last_reply_latency_s": (round(latency_samples[-1], 2)
@@ -527,6 +565,7 @@ def _build_session() -> GeminiLiveSession:
         tool_executor=tool_executor,
         on_user_text=on_user_text,
         on_ai_text=on_ai_text,
+        on_first_token=on_first_token,
     )
 
 

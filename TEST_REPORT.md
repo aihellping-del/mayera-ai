@@ -1249,3 +1249,51 @@ both next to connection state.
 Tests: 19/19 new (~/workspace/test_command_runner.py) + every
 regression suite + Node 11/11 + smoke with /health sessions
 verified live. Live-voice proof still needs his PC as always.
+
+--- v3.33.0 addendum (2026-11-10): PERFORMANCE EMERGENCY ---
+User's observed numbers: avg latency 5.57 s, sessions stuck
+25 s, reconnect counter 17, browser disconnects. Full code
+audit first (no timeout was merely raised anywhere):
+(1) THE 25s STUCK + RECONNECT INFLATION - real root cause:
+the watchdog's stuck-detector and force_reconnect's guard
+measured time since a tool last STARTED/FINISHED, but a single
+long tool (WhatsApp app flow, research) runs 30-90 s INSIDE
+one call with no audio - so at 25 s the watchdog declared the
+healthy session dead and reconnected MID-TOOL, losing turns
+and inflating the counter. Fix: 'processing' is now a state,
+not a suspicion - force_reconnect refuses while a tool batch
+is in flight, and the watchdog skips those turns; the per-tool
+timeouts (v3.32) are the bound there.
+(2) RECONNECT LOOP CIRCUIT BREAKER - found by this release's
+own unit test: a session that connects then dies instantly
+reconnected 62,576 times in 1.5 s in the harness, because
+backoff only covered FAILED attempts, never successful-but-
+instantly-dead sessions (in production: poisoned resumption
+handle / instant server termination, slowed only by network
+latency - a plausible contributor to his counter of 17).
+Sessions now track birth time; 3+ deaths under 5 s insert a
+growing pause (2/4/8...30 s cap) before the next cycle; a
+session living 30 s+ forgives the streak.
+(3) ROTATIONS != RECONNECTS: go_away is the provider's normal
+session time-limit rotation; it now counts as a rotation
+('[rotate]' log, session_rotations in /health), not a failure.
+(4) LATENCY SPLIT (Task 5): first-TOKEN vs first-AUDIO are now
+measured separately per turn ('chup -> pehla shabd' in the
+[latency] line, avg_first_token_s in /health + Diagnostics) -
+model/network wait and audio-path wait are distinguishable.
+(5) BROWSER (Task 4): a CDP transport failure (send error,
+socket close, 20 s silent call) marks the page dead at once;
+alive() answers instantly and the NEXT operation reconnects,
+instead of every operation failing 'browser disconnected'.
+/health also gains browser_ready (poll-free cached state).
+Already present, verified, NOT rebuilt: persistent session +
+single-owner reconnect + backoff-with-jitter (v3.6/v3.7),
+streaming first-chunk playback, sender-queue decoupling
+(v3.14), tool parallelism + backgrounding, health fields.
+Honest limit: the 5.57 s AVERAGE itself is dominated by
+model/network time on his line (his plain replies measured
+1.4-3.0 s in earlier logs); no client change removes Google's
+generation time - the split metrics now prove which part is
+which on his own terminal.
+Tests: 13/13 new (~/workspace/test_perf_emergency.py) + every
+regression suite + Node 11/11 + smoke with new /health fields.

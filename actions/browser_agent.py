@@ -197,6 +197,12 @@ class _CdpPage:
         self._next_id = 0
         self._pending = {}
         self._reader = None
+        # v3.33: set the moment the transport provably dies (send
+        # failure, socket close, a 20 s silent call). Before this,
+        # a half-dead tab kept passing as 'connected' until some
+        # later check happened to notice, and every operation in
+        # between failed with 'browser disconnected'.
+        self._dead = False
 
     async def connect(self):
         import websockets
@@ -218,21 +224,35 @@ class _CdpPage:
                 if fut is not None and not fut.done():
                     fut.set_result(msg)
         except Exception:  # noqa: BLE001 - connection closed
+            self._dead = True
             for fut in self._pending.values():
                 if not fut.done():
                     fut.set_exception(ConnectionError("browser closed"))
             self._pending.clear()
 
     async def call(self, method, **params):
-        if self._ws is None:
+        if self._ws is None or self._dead:
             raise ConnectionError("browser not connected")
         self._next_id += 1
         mid = self._next_id
         fut = asyncio.get_running_loop().create_future()
         self._pending[mid] = fut
-        await self._ws.send(json.dumps(
-            {"id": mid, "method": method, "params": params}))
-        msg = await asyncio.wait_for(fut, timeout=20)
+        try:
+            await self._ws.send(json.dumps(
+                {"id": mid, "method": method, "params": params}))
+        except Exception:  # noqa: BLE001 - transport died mid-send
+            self._dead = True
+            self._pending.pop(mid, None)
+            raise ConnectionError("browser closed")
+        try:
+            msg = await asyncio.wait_for(fut, timeout=20)
+        except asyncio.TimeoutError:
+            # 20 s of silence from the tab = the transport is dead
+            # for our purposes; mark it so the NEXT operation
+            # reconnects at once instead of failing the same way.
+            self._dead = True
+            self._pending.pop(mid, None)
+            raise ConnectionError("browser response timeout")
         if "error" in msg:
             raise RuntimeError(str(msg["error"])[:200])
         return msg.get("result") or {}
@@ -272,6 +292,8 @@ class _CdpPage:
             await asyncio.sleep(0.25)
 
     async def alive(self):
+        if self._dead:
+            return False
         try:
             return (await self.eval("1")) == 1
         except Exception:  # noqa: BLE001
@@ -359,6 +381,14 @@ class BrowserAgent:
         self._last_url = None  # last page this agent navigated to
         self._targets_fetcher = targets_fetcher or _fetch_targets
         self._tab_closer = tab_closer or _close_target
+
+    def ready(self):
+        """Cheap, poll-free status for /health (v3.33): a page
+        object exists and its transport has not died. (A full
+        alive() probe costs a CDP round-trip; the dashboard must
+        not poll the browser just to display a status.)"""
+        return (self._page is not None
+                and not getattr(self._page, "_dead", False))
 
     # ------------------------------------------------------------------
     async def _ensure_page(self):

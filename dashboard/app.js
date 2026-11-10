@@ -473,8 +473,8 @@ async function refreshDiag() {
     const c = h.client_playback || {};
     const a = h.audio || {}, t = h.tools || {}, s = h.sessions || {};
     box.textContent =
-      `Connection: ${h.connection_state} • Reconnects: ${h.reconnect_count} • WS sessions: ${s.websocket ?? "-"} • Background tasks: ${s.background_tool_tasks ?? "-"}` +
-      `\nJawab latency: last ${h.last_reply_latency_s ?? "-"}s • avg ${h.avg_reply_latency_s ?? "-"}s (${h.replies_measured} replies)` +
+      `Connection: ${h.connection_state} • Reconnects: ${h.reconnect_count} • Rotations: ${h.session_rotations ?? "-"} • WS sessions: ${s.websocket ?? "-"} • Background tasks: ${s.background_tool_tasks ?? "-"} • Browser: ${h.browser_ready ? "ready" : "not ready"}` +
+      `\nJawab latency: last ${h.last_reply_latency_s ?? "-"}s • avg ${h.avg_reply_latency_s ?? "-"}s (${h.replies_measured} replies) • pehla shabd avg: ${h.avg_first_token_s ?? "-"}s` +
       `\nAudio out: ${a.ai_chunks_sent} chunks bheje • Mic in: ${a.mic_chunks_received} chunks` +
       `\nSpeaker (browser): played ${c.played ?? "-"} • gap (starved) ${c.starved ?? "-"} • dropped ${c.droppedQueue ?? "-"} • buffer ${c.bufferMs ?? "-"} ms` +
       `\nTools: ${t.calls} calls • last ${t.last_seconds ?? "-"}s • avg ${t.avg_seconds ?? "-"}s • deduped ${t.deduped}`;

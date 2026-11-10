@@ -73,7 +73,7 @@ def strip_think(text):
 class GeminiLiveSession:
     def __init__(self, api_key, on_audio, on_status, on_interrupted,
                  store=None, tool_executor=None,
-                 on_user_text=None, on_ai_text=None):
+                 on_user_text=None, on_ai_text=None, on_first_token=None):
         self._api_key = api_key
         self._on_audio = on_audio
         self._on_status = on_status
@@ -82,6 +82,11 @@ class GeminiLiveSession:
         self._tools = tool_executor
         self._on_user_text = on_user_text    # async fn(str) - server-side only
         self._on_ai_text = on_ai_text        # async fn(str) - server-side only
+        # v3.33: fired ONCE per turn when the model's first output
+        # text arrives - lets main.py measure time-to-first-token
+        # separately from time-to-first-audio (spec Task 5).
+        self._on_first_token = on_first_token
+        self._token_seen = False
         self._client = genai.Client(
             api_key=api_key,
             http_options=types.HttpOptions(api_version="v1beta"),
@@ -96,6 +101,22 @@ class GeminiLiveSession:
         # ERROR when reconnects are exhausted. Shown in /health.
         self.state = "DISCONNECTED"
         self.reconnect_count = 0
+        # v3.33: provider session rotations (go_away - the Live
+        # API ends sessions at its own time limit and offers a
+        # fresh one) are NORMAL maintenance, not failures. They
+        # used to inflate reconnect_count, which read as 'the
+        # connection keeps dying' in his dashboard.
+        self.rotation_count = 0
+        self._planned_reconnect = False
+        # v3.33 circuit breaker: a session that dies within
+        # seconds of connecting, over and over (poisoned
+        # resumption handle, instant server-side termination),
+        # otherwise loops connect->die->connect at full speed
+        # with NO delay - the backoff only covered FAILED
+        # attempts. Found by a unit test whose fake session died
+        # instantly: 62,000 reconnects in 1.5 s.
+        self._session_born = 0.0
+        self._short_lived_streak = 0
         self.last_reconnect_seconds = None
         self._last_msg_at = 0.0    # last message FROM Gemini
         self._last_tool_at = 0.0   # last tool execution (stuck guard)
@@ -471,11 +492,12 @@ class GeminiLiveSession:
             )
         self.state = "CONNECTED"
         self._send_failed = False
+        self._session_born = time.monotonic()
         await self._on_status("connected", "JARVIS connected hai.")
         self._recv_task = asyncio.create_task(self._receive_loop())
         await self._flush_pending_tool_responses()
 
-    def _schedule_reconnect(self):
+    def _schedule_reconnect(self, planned=False):
         """The ONE owner of reconnection (v3.6 fix).
 
         A drop can announce itself three ways at nearly the same
@@ -484,12 +506,24 @@ class GeminiLiveSession:
         own reconnect, and the parallel reconnects kept closing each
         other's brand-new sessions: the UI said "reconnecting"
         forever and JARVIS never actually came back.
-        """
+
+        `planned=True` marks a provider session rotation (go_away):
+        counted separately from error reconnects (v3.33)."""
         if self._stopped:
             return
         task = self._reconnect_task
         if task is not None and not task.done():
             return
+        # Circuit-breaker bookkeeping (v3.33): how long did the
+        # dying session live? Under 5 s = short-lived (suspicious);
+        # over 30 s = healthy, forgive the streak.
+        if self._session_born:
+            _age = time.monotonic() - self._session_born
+            if _age < 5:
+                self._short_lived_streak += 1
+            elif _age > 30:
+                self._short_lived_streak = 0
+        self._planned_reconnect = planned
         if self.state in ("CONNECTED", "CONNECTING"):
             self.state = "RECONNECTING"
         self._reconnect_task = asyncio.create_task(self._reconnect())
@@ -529,6 +563,19 @@ class GeminiLiveSession:
             self._recv_task = None
         if self._stopped:
             return
+        # Circuit breaker (v3.33): sessions keep dying within
+        # seconds of connecting - pause before the next cycle so
+        # the loop breathes (2s, 4s, 8s ... 30s cap) instead of
+        # hammering the provider thousands of times.
+        if self._short_lived_streak >= 3:
+            _pause = min(30.0, 2.0 ** (self._short_lived_streak - 2))
+            print(f"  [reconnect] session baar-baar turant toot "
+                  f"raha hai (streak {self._short_lived_streak}) - "
+                  f"{_pause:.0f}s ruk kar try kar raha hu",
+                  flush=True)
+            await asyncio.sleep(_pause)
+            if self._stopped:
+                return
         delay = config.RECONNECT_BASE_DELAY
         for attempt in range(1, config.MAX_RECONNECT_ATTEMPTS + 1):
             if self._stopped:
@@ -555,12 +602,26 @@ class GeminiLiveSession:
                     return
                 self.state = "CONNECTED"
                 self._send_failed = False
-                self.reconnect_count += 1
+                self._session_born = time.monotonic()
                 self.last_reconnect_seconds = round(
                     time.monotonic() - self._reconnect_started, 1)
-                print(f"  [reconnect] judne me kul "
-                      f"{self.last_reconnect_seconds:.1f}s laga "
-                      f"(reconnect #{self.reconnect_count})", flush=True)
+                if self._planned_reconnect:
+                    # Provider rotation (session time limit): the
+                    # conversation continues on the resumed session;
+                    # NOT an error reconnect (v3.33).
+                    self.rotation_count += 1
+                    self._planned_reconnect = False
+                    print(f"  [rotate] session refresh ho gaya "
+                          f"{self.last_reconnect_seconds:.1f}s me "
+                          f"(rotation #{self.rotation_count} - "
+                          "provider ki time-limit, normal hai)",
+                          flush=True)
+                else:
+                    self.reconnect_count += 1
+                    print(f"  [reconnect] judne me kul "
+                          f"{self.last_reconnect_seconds:.1f}s laga "
+                          f"(reconnect #{self.reconnect_count})",
+                          flush=True)
                 await self._on_status("connected", "JARVIS phir se connected hai.")
                 self._recv_task = asyncio.create_task(self._receive_loop())
                 await self._flush_pending_tool_responses()
@@ -590,11 +651,23 @@ class GeminiLiveSession:
     def force_reconnect(self, reason=""):
         """Reconnect NOW because the session looks dead although no
         error surfaced (called by main.py's watchdog when a reply is
-        25s overdue). Refuses while a tool just ran - that turn may
-        still be finishing legitimately."""
+        25s overdue).
+
+        v3.33 ROOT FIX for the 'stuck 25s + reconnect counter
+        climbing' reports: the old guard measured time since a
+        tool last STARTED or finished - but a single long tool
+        (the WhatsApp app flow, a browser research) runs 30-90 s
+        INSIDE one call, so at 25 s the watchdog declared the
+        healthy session dead and reconnected MID-TOOL, losing the
+        turn and inflating the counter. A batch IN FLIGHT is the
+        model PROCESSING, not a dead session - the per-tool
+        timeouts (v3.32) are the real bound there. Never
+        force-reconnect while tools are running."""
         if self._stopped or self._session is None:
             return
         if self.state != "CONNECTED":
+            return
+        if self.running_tool_tasks > 0:
             return
         if time.monotonic() - self._last_tool_at < 15:
             return
@@ -708,6 +781,10 @@ class GeminiLiveSession:
             out_tr = getattr(sc, "output_transcription", None)
             if out_tr is not None and getattr(out_tr, "text", None):
                 self._out_buf += out_tr.text
+                if not self._token_seen:
+                    self._token_seen = True
+                    if self._on_first_token is not None:
+                        await self._on_first_token()
             if getattr(sc, "turn_complete", False):
                 await self._flush_turn()
 
@@ -731,7 +808,7 @@ class GeminiLiveSession:
                 self._resumption_handle = handle
 
         if getattr(response, "go_away", None) is not None and not self._stopped:
-            self._schedule_reconnect()
+            self._schedule_reconnect(planned=True)
 
     async def _flush_turn(self):
         if self._in_buf.strip():
@@ -745,6 +822,7 @@ class GeminiLiveSession:
                 await self._on_ai_text(self.last_ai_text)
         self._in_buf = ""
         self._out_buf = ""
+        self._token_seen = False
 
     # Tools that only read the world or touch independent state -
     # safe to run concurrently inside one batch (v3.14). Everything
