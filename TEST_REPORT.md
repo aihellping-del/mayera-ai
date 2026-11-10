@@ -1197,3 +1197,25 @@ Tests: noise gate 14/14 (window edges re-derived: gate opens
 strictly past 2.5 s; the old 1.3 s gap is now gated too), Node
 playback 11/11 (overflow scenario rebuilt at 12 s), screen /
 smooth / WhatsApp-desktop / HUD / Chrome regressions, smoke.
+
+--- v3.31.1 addendum (2026-11-10): UPDATE INTEGRITY ---
+Caught by this release's own fake-install check: minutes after
+the v3.31.0 push, an update pulled a MIX - version.txt fresh,
+config/settings.py still the cached old copy - a half-updated
+install that reports the new version while missing its rules.
+(GitHub's raw CDN caches each file independently; a re-run
+minutes later fetched everything correctly, verified.)
+Fix: the channel gains checksums.txt (sha256 per shipped file,
+itself listed in manifest.txt so older updaters download it
+harmlessly). The updater verifies every staged file's hash,
+retrying a mismatched file up to 4 times with 2 s gaps (CDN
+settling); a file that never matches ABORTS the update - the
+old version keeps running whole instead of a new one arriving
+broken. Channels without checksums.txt keep the legacy path.
+Note: the v3.31.1 update itself is fetched by the pre-checksum
+updater (one last unverified hop); verification protects every
+update from v3.31.2 onward.
+Tests: 4/4 new (~/workspace/test_updater_checksums.py - parse,
+stale-stale-good retry success, always-stale aborts after 4,
+legacy single fetch) + the v3.31.0 fake-install re-verified
+clean after CDN settled.

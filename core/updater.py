@@ -31,9 +31,11 @@ Public or private repo - both work:
 
 import base64
 import ctypes
+import hashlib
 import os
 import sys
 import tempfile
+import time
 import urllib.request
 from ctypes import wintypes
 from pathlib import Path
@@ -111,6 +113,45 @@ def _fetch(path, token=None):
         return resp.read()
 
 
+def _parse_checksums(text):
+    """checksums.txt: '<sha256>  <path>' per line -> {path: hash}.
+    (v3.31.1: right after a release, GitHub's CDN can serve a MIX
+    of new and cached-old files - version.txt fresh, a code file
+    stale - which produced a half-updated install. Verifying
+    every file's hash makes a mixed download abort instead.)"""
+    out = {}
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split(None, 1)
+        if len(parts) == 2 and len(parts[0]) == 64:
+            out[parts[1].strip()] = parts[0].lower()
+    return out
+
+
+def _fetch_verified(rel, expected_hash, token=None):
+    """Fetch one file; when a checksum is known, retry a few
+    times while the served bytes don't match (CDN settling),
+    then give up - the caller aborts the whole update and the
+    old version keeps running untouched."""
+    attempts = 4 if expected_hash else 1
+    last_error = None
+    for attempt in range(attempts):
+        data = _fetch(rel, token)
+        if not data:
+            raise ValueError(f"empty download: {rel}")
+        if not expected_hash:
+            return data
+        digest = hashlib.sha256(data).hexdigest()
+        if digest == expected_hash:
+            return data
+        last_error = ValueError(f"checksum mismatch: {rel}")
+        if attempt + 1 < attempts:
+            time.sleep(2)
+    raise last_error
+
+
 def _version_tuple(text):
     try:
         return tuple(int(p) for p in text.strip().split(".") if p != "")
@@ -157,15 +198,18 @@ def main():
         manifest = _fetch("manifest.txt", token).decode("utf-8")
         files = [ln.strip() for ln in manifest.splitlines()
                  if ln.strip() and not ln.strip().startswith("#")]
+        try:
+            checksums = _parse_checksums(
+                _fetch("checksums.txt", token).decode("utf-8"))
+        except Exception:
+            checksums = {}  # older channel without checksums
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             staged = []
             for rel in files:
                 if not _is_safe(rel) or rel == "version.txt":
                     continue
-                data = _fetch(rel, token)
-                if not data:
-                    raise ValueError(f"empty download: {rel}")
+                data = _fetch_verified(rel, checksums.get(rel), token)
                 dest = tmp / rel
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(data)

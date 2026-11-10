@@ -57,3 +57,4 @@ providers/key_vault.py
 actions/browser_agent.py
 actions/whatsapp.py
 actions/whatsapp_desktop.py
+checksums.txt
