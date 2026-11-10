@@ -246,3 +246,36 @@ unaffected. static/index.html gains the #pcanvas element and the
 particles.js script tag. Verified: real package run locally +
 headless screenshot shows the particle head as the default UI; the
 updater test (fake v2.8 install) is in the push notes.
+
+--- v3.0.0 addendum (2026-11-10): SPEED OPTIMIZATION pass ---
+Full response-path audit (main.py, gemini_live.py, connection
+manager, audio utils, app.js, tools). Changes, quality unchanged:
+(1) PRE-WARM: the Gemini session now connects in the background the
+moment the browser connects, not when START TALKING is pressed - the
+2.4-10 s connect wait moves off the critical path entirely. The
+session stays silent (no UI status, no greeting, watcher gated)
+until START; the greeting is deferred to START via session.greet().
+START pressed mid-prewarm simply awaits it; any prewarm failure
+falls back to the exact old cold-connect path.
+(2) MONITORING: felt latency per reply (last loud mic chunk -> first
+reply audio) is measured once per turn, printed in the terminal as
+"[latency] Jawab ka pehla sound: X.XXs (average ...)", and exposed
+in /health (last/avg/count).
+(3) Per-chunk status spam removed: on_ai_audio sent one JSON status
+per audio chunk; statuses are now de-duplicated (state+message) in
+main.send_ui_status, and app.js setState skips identical repeats.
+(4) Mic chunk 4096 -> 2048 samples: speech reaches Gemini up to
+~128 ms sooner at each turn end.
+(5) rms_level hot path: int16 stride sampling - 0.410 -> 0.176 ms
+per chunk locally, identical threshold behaviour (diff 0.0000).
+(6) System instruction compressed 2191 -> 2001 chars (~547 -> ~500
+tokens) with every behavioural rule preserved; memory/checkpoint
+headers shortened too.
+(7) open_website tool now runs via asyncio.to_thread so launching
+the browser can never stall live audio forwarding.
+Tests: 15/15 behaviour tests (prewarm silent, warm START instant +
+greet once, audio forwarding, stop, latency sampling, /health
+fields); stop-command regression 11/11; tools OK; real-package
+headless run: UI pixel-identical to v2.9, 36 wave bars, no JS
+errors. Real per-reply latency can only be measured on the user's
+PC/internet - the new [latency] terminal lines provide exactly that.

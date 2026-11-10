@@ -68,14 +68,28 @@ def resample_pcm16(data, from_rate, to_rate):
 
 
 def rms_level(data):
-    """Root-mean-square level of PCM16 audio, 0.0 (silent) .. 1.0 (loud)."""
+    """Root-mean-square level of PCM16 audio, 0.0 (silent) .. 1.0 (loud).
+
+    Speed (v3.0): this runs on EVERY microphone chunk in the hot path
+    before the chunk is forwarded, so it works on the raw int16 values
+    (no float list) and, for long chunks, samples every 4th sample -
+    statistically the same level for speech, ~4x less CPU.
+    """
     data = ensure_bytes(data)
     if len(data) < SAMPLE_WIDTH:
         return 0.0
-    samples = pcm16_to_floats(data)
-    if not samples:
+    count = len(data) // SAMPLE_WIDTH
+    ints = struct.unpack("<%dh" % count, data[: count * SAMPLE_WIDTH])
+    step = 4 if count > 512 else 1
+    total = 0
+    n = 0
+    for i in range(0, count, step):
+        v = ints[i]
+        total += v * v
+        n += 1
+    if not n:
         return 0.0
-    return math.sqrt(sum(v * v for v in samples) / len(samples))
+    return math.sqrt(total / n) / 32768.0
 
 
 def chunk_bytes(data, chunk_size):

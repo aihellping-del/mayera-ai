@@ -15,6 +15,7 @@ The executor is plain Python and fully unit-testable: every function
 returns a JSON-able dict that is reported back to the model.
 """
 
+import asyncio
 import datetime
 import re
 import webbrowser
@@ -108,7 +109,9 @@ class ToolExecutor:
                     "datetime": now.strftime("%A, %d %B %Y, %I:%M %p"),
                 }
             if name == "open_website":
-                return self._open(args.get("url", ""))
+                # webbrowser.open() blocks; run it off the event loop
+                # so it can never stall live audio forwarding (v3.0).
+                return await asyncio.to_thread(self._open, args.get("url", ""))
             return {"status": "error", "message": f"unknown tool {name}"}
         except Exception as exc:  # noqa: BLE001 - reported to the model
             return {"status": "error", "message": exc.__class__.__name__}

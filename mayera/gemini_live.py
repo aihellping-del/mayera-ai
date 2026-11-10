@@ -73,23 +73,23 @@ class GeminiLiveSession:
             if memories:
                 lines = "\n".join("- " + m["content"] for m in memories)
                 text += (
-                    "\n\nGOLU KE BAARE ME TUMHARI Lambi-miyaad YAADEIN "
-                    "(inhe swabhavik roop se istemal karo, ginwao mat):\n"
+                    "\n\nGOLU KE BAARE ME TUMHARI YAADEIN (swabhavik roop "
+                    "se istemal karo, ginwao mat):\n"
                     + lines
                 )
             cp = self._store.get_checkpoint()
             if cp and cp.get("topic"):
                 text += (
-                    "\n\nPICHHLI BAATCHEET KA CHECKPOINT: Aakhri baar tum "
-                    f"is vishay par baat kar rahe the: \"{cp['topic']}\". "
-                    "Agar mauka mile to wahi se swabhavik roop se jodo."
+                    "\n\nPICHHLI BAATCHEET: Aakhri baar tum is vishay par "
+                    f"baat kar rahe the: \"{cp['topic']}\". Mauka mile to "
+                    "wahi se swabhavik roop se jodo."
                 )
         return text
 
     # ------------------------------------------------------------------
     # lifecycle
     # ------------------------------------------------------------------
-    async def start(self):
+    async def start(self, greet=True):
         if not self._api_key:
             raise MayeraError(
                 "auth_error",
@@ -98,6 +98,13 @@ class GeminiLiveSession:
             )
         self._stopped = False
         await self._connect_with_fallback()
+        if greet:
+            await self._maybe_greet()
+
+    async def greet(self):
+        """The spoken greeting, deferred: pre-warmed sessions connect
+        silently in the background (v3.0) and greet only when the user
+        actually presses START TALKING."""
         await self._maybe_greet()
 
     async def stop(self):

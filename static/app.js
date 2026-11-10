@@ -40,7 +40,12 @@ let micLevel = 0, speakLevel = 0;
 /* ------------------------------------------------------------------ */
 /* UI state                                                            */
 /* ------------------------------------------------------------------ */
+let _lastStateKey = "";
 function setState(state, message) {
+  // v3.0: identical repeat calls (one per audio chunk) skip DOM work.
+  const key = state + "|" + (message || "");
+  if (key === _lastStateKey) return;
+  _lastStateKey = key;
   if (message) statusText.textContent = message;
   const visual = { speaking: "speaking", listening: "listening", connected: "listening",
                    muted: "listening", thinking: "thinking", error: "error" }[state] || "idle";
@@ -136,7 +141,9 @@ async function startMicrophone() {
   });
   micCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: MIC_RATE });
   micSource = micCtx.createMediaStreamSource(micStream);
-  micProcessor = micCtx.createScriptProcessor(4096, 1, 1);
+  // 2048 samples @16 kHz = 128 ms per chunk (was 4096 = 256 ms):
+  // his speech reaches Gemini up to ~128 ms sooner at every turn end.
+  micProcessor = micCtx.createScriptProcessor(2048, 1, 1);
   micSink = micCtx.createGain(); micSink.gain.value = 0; // silent sink, no echo
 
   micProcessor.onaudioprocess = (e) => {
