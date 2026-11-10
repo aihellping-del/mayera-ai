@@ -798,6 +798,28 @@ def _install_stop_hotkey():
         print("  Note: Ctrl+Shift+Q hotkey register nahi ho payi "
               "(terminal ko Administrator se chalakar dekho).")
 
+    # v3.29: rescue keys for when loud music drowns his voice -
+    # he cannot SAY 'band karo' over a playing song (the mic hears
+    # the song, not him), so his fingers get a direct line:
+    # Ctrl+Shift+P = gaana/video pause, Ctrl+Shift+M = mute.
+    def _media(name):
+        try:
+            _pc.media_key(name)
+            print(f"  [hotkey] media {name}")
+        except Exception:  # noqa: BLE001
+            pass
+
+    for combo, action, label in (
+            ("ctrl+shift+p", "play_pause", "gaana/video pause"),
+            ("ctrl+shift+m", "mute", "awaaz band/chalu")):
+        try:
+            keyboard.add_hotkey(
+                combo, lambda a=action: _media(a))
+            print(f"  Media key: {combo.upper()} = {label} "
+                  "(gaana bajte samay awaaz na sune to ye dabao).")
+        except Exception:  # noqa: BLE001
+            pass
+
 
 def main():
     ensure_api_key()

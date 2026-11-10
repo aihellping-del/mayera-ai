@@ -543,12 +543,126 @@ def _default_scroller(direction, amount):
     ctypes.windll.user32.mouse_event(0x0800, 0, 0, delta, 0)  # MOUSEEVENTF_WHEEL
 
 
+_MODIFIER_VK = {"ctrl": 0x11, "shift": 0x10, "alt": 0x12}
+
+# Extra chord tails (v3.29): letters usable in ctrl+<letter>
+# chords - 'w' closes ONE browser tab, 't' opens a new one.
+_CHORD_KEYS = {"w": 0x57, "t": 0x54}
+
+
+def _is_chord(key):
+    """'ctrl+w' style: modifiers + one tail key (v3.29)."""
+    if "+" not in key:
+        return False
+    parts = [p.strip() for p in key.split("+") if p.strip()]
+    if len(parts) < 2:
+        return False
+    if any(p not in _MODIFIER_VK for p in parts[:-1]):
+        return False
+    return parts[-1] in _PRESS_KEYS or parts[-1] in _CHORD_KEYS
+
+
 def _default_keyer(key):
     import ctypes
+    user32 = ctypes.windll.user32
+    if "+" in key:  # v3.29: chord, e.g. 'ctrl+w' (close ONE tab)
+        parts = [p.strip() for p in key.split("+") if p.strip()]
+        mods = [_MODIFIER_VK[p] for p in parts[:-1]]
+        vk = _PRESS_KEYS.get(parts[-1]) or _CHORD_KEYS[parts[-1]]
+        for mod in mods:
+            user32.keybd_event(mod, 0, 0, 0)
+        user32.keybd_event(vk, 0, 0, 0)
+        user32.keybd_event(vk, 0, 2, 0)
+        for mod in reversed(mods):
+            user32.keybd_event(mod, 0, 2, 0)
+        return
     vk = _PRESS_KEYS[key]
+    user32.keybd_event(vk, 0, 0, 0)
+    user32.keybd_event(vk, 0, 2, 0)
+
+
+def _default_media_key(name):
+    """System media keys (v3.29): play/pause or mute, delivered to
+    whichever app holds the media session (Chrome/YouTube/...)."""
+    import ctypes
+    vk = {"play_pause": 0xB3, "stop": 0xB2, "mute": 0xAD}[name]
     user32 = ctypes.windll.user32
     user32.keybd_event(vk, 0, 0, 0)
     user32.keybd_event(vk, 0, 2, 0)
+
+
+def _default_foreground_title():
+    """Title of the window in front right now ('' when unknown)."""
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return ""
+        buf = ctypes.create_unicode_buffer(512)
+        user32.GetWindowTextW(hwnd, buf, 512)
+        return buf.value or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _window_by_title(title_part):
+    """(found, window) via pygetwindow - title CONTAINS match."""
+    try:
+        import pygetwindow as gw
+        wins = gw.getWindowsWithTitle(title_part)
+        return (True, wins[0]) if wins else (False, None)
+    except Exception:  # noqa: BLE001
+        return False, None
+
+
+def _ctypes_window_action(title_part, show_cmd):
+    """EnumWindows fallback for minimise/restore by title part."""
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        found = []
+
+        @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p,
+                            ctypes.c_void_p)
+        def _cb(hwnd, _lp):
+            if user32.IsWindowVisible(hwnd):
+                buf = ctypes.create_unicode_buffer(512)
+                user32.GetWindowTextW(hwnd, buf, 512)
+                if title_part.lower() in (buf.value or "").lower():
+                    found.append(hwnd)
+                    return False
+            return True
+
+        user32.EnumWindows(_cb, 0)
+        if not found:
+            return False
+        user32.ShowWindow(found[0], show_cmd)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _default_window_minimise(title_part):
+    ok, win = _window_by_title(title_part)
+    if ok and win is not None:
+        try:
+            win.minimize()
+            return True
+        except Exception:  # noqa: BLE001
+            pass
+    return _ctypes_window_action(title_part, 6)  # SW_MINIMIZE
+
+
+def _default_window_restore(title_part):
+    ok, win = _window_by_title(title_part)
+    if ok and win is not None:
+        try:
+            win.restore()
+            return True
+        except Exception:  # noqa: BLE001
+            pass
+    return _ctypes_window_action(title_part, 9)  # SW_RESTORE
 
 
 class PcController:
@@ -558,7 +672,8 @@ class PcController:
                  focuser=None, sleeper=None, bytes_capturer=None,
                  title_focuser=None, clicker_at=None,
                  dialog_dismisser=None, setpos=None, positioner=None,
-                 sizer=None):
+                 sizer=None, fg_title=None, window_minimiser=None,
+                 window_restorer=None, media_keyer=None):
         self._win = (sys.platform.startswith("win")
                      if is_windows is None else is_windows)
         self._runner = runner or _default_runner
@@ -583,6 +698,10 @@ class PcController:
         self._setpos = setpos or _default_setpos
         self._positioner = positioner or _default_position
         self._sizer = sizer or _default_screen_size
+        self._fg_title = fg_title or _default_foreground_title
+        self._window_minimiser = window_minimiser or _default_window_minimise
+        self._window_restorer = window_restorer or _default_window_restore
+        self._media_keyer = media_keyer or _default_media_key
         self._last_open = None  # (process image, monotonic time)
         # pyautogui FAILSAFE (v3.13, user's spec): slamming the mouse
         # into a screen corner aborts pyautogui actions. Best-effort -
@@ -824,6 +943,41 @@ class PcController:
         except Exception:  # noqa: BLE001
             pass
 
+    def foreground_title(self):
+        """Title of the window in front (v3.29) - used to notice
+        when JARVIS's own HUD is hiding the screen he must see."""
+        try:
+            return self._fg_title() or ""
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def minimise_window(self, title_part):
+        try:
+            return bool(self._window_minimiser(title_part))
+        except Exception:  # noqa: BLE001
+            return False
+
+    def restore_window(self, title_part):
+        try:
+            return bool(self._window_restorer(title_part))
+        except Exception:  # noqa: BLE001
+            return False
+
+    def media_key(self, name):
+        """System media control (v3.29): 'play_pause' pauses the
+        song/video in whichever app is playing - the rescue when
+        loud music drowns the user's voice so he cannot SAY stop.
+        'mute' toggles system mute."""
+        blocked = self._guard()
+        if blocked:
+            return blocked
+        name = (name or "").strip().lower()
+        if name not in ("play_pause", "stop", "mute"):
+            return {"status": "error",
+                    "message": "media key: play_pause / stop / mute"}
+        self._media_keyer(name)
+        return {"status": "done", "media": name}
+
     def glide_to(self, x, y):
         """Public glide (no click) - e.g. after a browser DOM click,
         so the user sees his arrow travel to what JARVIS pressed."""
@@ -877,10 +1031,11 @@ class PcController:
         if blocked:
             return blocked
         key = (key or "").strip().lower()
-        if key not in _PRESS_KEYS:
+        if key not in _PRESS_KEYS and not _is_chord(key):
             return {"status": "error",
                     "message": "ye key meri list me nahi hai: "
-                               + ", ".join(sorted(set(_PRESS_KEYS)))}
+                               + ", ".join(sorted(set(_PRESS_KEYS)))
+                               + " (ya ctrl+w jaisi chord)"}
         self._keyer(key)
         return {"status": "pressed", "key": key}
 

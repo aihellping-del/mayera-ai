@@ -689,6 +689,18 @@ def function_declarations():
                 type=types.Type.OBJECT, properties={}),
         ),
         types.FunctionDeclaration(
+            name="browser_close_tab",
+            description=(
+                "Close ONLY the current tab in JARVIS's own "
+                "browser - never the whole browser and never his "
+                "other tabs. Use this for 'tab band karo'. Closing "
+                "the whole Chrome/browser is close_app, ONLY when "
+                "he clearly says 'Chrome band karo'."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT, properties={}),
+        ),
+        types.FunctionDeclaration(
             name="whatsapp_send",
             description=(
                 "Send a WhatsApp message from the user's own "
@@ -772,7 +784,8 @@ _FILE_TOOLS = {"list_files", "create_folder", "create_file",
 # v3.20: JARVIS's own personal browser
 _BROWSER_TOOLS = {"browser_search", "browser_research",
                   "browser_open_result", "browser_click",
-                  "browser_read_page", "browser_back"}
+                  "browser_read_page", "browser_back",
+                  "browser_close_tab"}
 
 
 class ToolExecutor:
@@ -1014,6 +1027,8 @@ class ToolExecutor:
             return await b.read_page()
         if name == "browser_back":
             return await b.back()
+        if name == "browser_close_tab":
+            return await b.close_current_tab()
         # browser_click: risky labels go through the same Haan/Nahi
         # gate as file trashing (v3.17) - the gate blocks on a
         # thread, so wrap it for the agent's async confirm callback.

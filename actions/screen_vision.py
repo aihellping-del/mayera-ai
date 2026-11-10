@@ -187,11 +187,44 @@ class ScreenVision:
         """Find the named element on screen (v3.21): capture, ask
         the vision model to POINT at it, scale the 0-1000 point to
         real pixels. Returns {status, x, y, target} or an error
-        dict - never a guessed position."""
+        dict - never a guessed position.
+
+        v3.29 (user-approved fix): when the element is NOT found
+        and JARVIS's own HUD window is the one in front - the
+        usual case while he is talking to JARVIS, with the target
+        app hidden behind it - minimise the HUD once, look again,
+        and restore the HUD whatever happens. Without this the
+        honest answer was forever 'nahi dikha' for everything
+        behind his own assistant's window."""
         target = (target or "").strip()
         if not target:
             return {"status": "error",
                     "message": "kis cheez par click karna hai, ye nahi bataya"}
+        result = self._locate_once(target)
+        if result.get("status") == "ok":
+            return result
+        pc = self._pc
+        if pc is None:
+            return result
+        try:
+            foreground = pc.foreground_title()
+            minimise = pc.minimise_window
+            restore = pc.restore_window
+        except AttributeError:
+            return result  # older/fake PC without window control
+        if "jarvis" not in (foreground or "").lower():
+            return result
+        if not minimise("JARVIS"):
+            return result  # could not move it - a 2nd photo would
+            # only photograph the same HUD; don't waste the call
+        try:
+            import time
+            time.sleep(0.4)
+            return self._locate_once(target)
+        finally:
+            restore("JARVIS")
+
+    def _locate_once(self, target):
         try:
             png, error = self._capture()
         except Exception as exc:  # noqa: BLE001

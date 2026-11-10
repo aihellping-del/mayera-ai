@@ -267,6 +267,22 @@ def _fetch_browser_ws_url(port):
     return info.get("webSocketDebuggerUrl")
 
 
+def _fetch_targets(port):
+    """All CDP targets (pages) of JARVIS's browser."""
+    with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/json/list", timeout=3) as resp:
+        return json.loads(resp.read().decode("utf-8", "replace"))
+
+
+def _close_target(port, target_id):
+    """Close ONE tab by its target id (v3.29 - never the window)."""
+    with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/json/close/{target_id}",
+            timeout=3) as resp:
+        resp.read()
+    return True
+
+
 async def _create_tab(port, url):
     """Ask the browser (browser-level CDP) to open a new tab."""
     import websockets
@@ -286,7 +302,8 @@ async def _create_tab(port, url):
 
 class BrowserAgent:
     def __init__(self, profile_dir=None, popen=None, page_factory=None,
-                 browser_finder=None, port=DEBUG_PORT, warm_tabs=None):
+                 browser_finder=None, port=DEBUG_PORT, warm_tabs=None,
+                 targets_fetcher=None, tab_closer=None):
         self._profile = (Path(profile_dir) if profile_dir
                          else Path.home() / ".jarvis_browser")
         self._popen = popen or subprocess.Popen
@@ -303,6 +320,9 @@ class BrowserAgent:
         # loaded, he could have messaged by hand.
         self._warm_tabs = warm_tabs or []
         self._warm_started = False
+        self._last_url = None  # last page this agent navigated to
+        self._targets_fetcher = targets_fetcher or _fetch_targets
+        self._tab_closer = tab_closer or _close_target
 
     # ------------------------------------------------------------------
     async def _ensure_page(self):
@@ -392,7 +412,8 @@ class BrowserAgent:
         if not query:
             return {"status": "error", "message": "kya search karna hai, ye nahi bataya"}
         page = await self._ensure_page()
-        await page.navigate(SEARCH_URL + urllib.parse.quote_plus(query))
+        self._last_url = SEARCH_URL + urllib.parse.quote_plus(query)
+        await page.navigate(self._last_url)
         raw = await page.eval(_EXTRACT_RESULTS_JS) or []
         results = []
         for item in raw:
@@ -422,10 +443,40 @@ class BrowserAgent:
                     "message": "pehle browser_search karo, phir number bolo"}
         page = await self._ensure_page()
         target = self._last_results[idx]
+        self._last_url = target["url"]
         await page.navigate(target["url"])
         title = await page.eval("document.title") or target["title"]
         return {"status": "done", "opened": title,
                 "url": target["url"]}
+
+    async def close_current_tab(self):
+        """Close ONLY the tab this agent is showing (v3.29) - his
+        complaint: 'tab band karo' par poora browser band ho jata
+        tha. The WhatsApp tab is never the target here."""
+        try:
+            targets = await asyncio.to_thread(
+                self._targets_fetcher, self._port)
+        except Exception:  # noqa: BLE001 - browser not running
+            return {"status": "error",
+                    "message": "browser khula hi nahi hai"}
+        pages = [t for t in targets
+                 if t.get("type") == "page" and t.get("id")]
+        mine = [t for t in pages
+                if "web.whatsapp.com" not in (t.get("url") or "")]
+        chosen = None
+        if self._last_url:
+            chosen = next((t for t in mine
+                           if t.get("url") == self._last_url), None)
+        if chosen is None and len(mine) == 1:
+            chosen = mine[0]
+        if chosen is None:
+            return {"status": "error",
+                    "message": "band karne wala tab nahi mila"}
+        await asyncio.to_thread(self._tab_closer, self._port,
+                                chosen["id"])
+        self._page = None
+        closed_url, self._last_url = chosen.get("url"), None
+        return {"status": "done", "closed_tab": closed_url}
 
     async def read_page(self, limit=1800):
         page = await self._ensure_page()

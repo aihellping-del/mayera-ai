@@ -1130,3 +1130,30 @@ Log latencies otherwise healthy: 0.84/2.80/2.94/1.17 plain,
 spikes only on tool turns (15.97 = the look_at_screen turn).
 Tests: Node playback 11/11 (expectations 0.07/0.17 -> 0.11/0.21),
 whatsapp desktop 11/11, whatsapp web 11/11, server smoke.
+
+--- v3.29.0 addendum (2026-11-10): HUD-MINIMISE CLICK FIX
+(USER-APPROVED) + YOUTUBE RESCUE KEYS + ONE-TAB CLOSE ---
+Two user items in one release. (1) He approved the background
+diagnosis of 'click nahi kar pa raha, nahi dikh raha': while he
+talks to JARVIS, JARVIS's own HUD window is in front and the
+target app hides behind it, so vision honestly found nothing.
+PcController gains foreground_title + minimise_window /
+restore_window (pygetwindow, ctypes EnumWindows fallback);
+ScreenVision.locate retries ONCE with the HUD minimised when
+the foreground title contains 'JARVIS', restoring it in a
+finally; minimise failure = no second (wasted) vision call;
+PCs without the new methods degrade gracefully.
+(2) His new report: a playing YouTube song drowns his voice
+('band karo' is not heard - the mic hears the song), and 'tab
+band karo' closed EVERYTHING. Fixes: global rescue hotkeys
+Ctrl+Shift+P (media play/pause) and Ctrl+Shift+M (mute) via a
+new PcController.media_key - fingers work when voice cannot;
+press_key learns chords (ctrl+w = close ONE tab; ctrl+alt+del
+still rejected); new tool browser_close_tab (45 declarations)
+closes only JARVIS-browser's current tab via CDP
+/json/close/<id>, WhatsApp tab excluded, ambiguous = refuse;
+the instruction gains the TAB NIYAM + the music-drowns-voice
+explanation with the hotkey/earphone advice.
+Tests: 13/13 new (~/workspace/test_hud_window.py) + ALL
+regressions (test_speed_round4's two cushion expectations
+updated to the v3.28 values 110/60) + Node 11/11 + smoke.
