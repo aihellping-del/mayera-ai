@@ -64,6 +64,12 @@ class GeminiLiveSession:
         self._last_msg_at = 0.0    # last message FROM Gemini
         self._last_tool_at = 0.0   # last tool execution (stuck guard)
         self._send_failed = False  # a send failed on a "live" session
+        # Tool responses that could not be delivered because the
+        # connection dropped mid-tool-call (v3.13, user's spec):
+        # queued here and flushed on the (re)connected session, so a
+        # finished action (e.g. text already typed) is never reported
+        # lost and the model never hangs waiting for a result.
+        self._pending_tool_responses = []
         self._reconnect_started = 0.0
         self._stopped = True
         self._resumption_handle = None
@@ -379,6 +385,7 @@ class GeminiLiveSession:
         self._send_failed = False
         await self._on_status("connected", "JARVIS connected hai.")
         self._recv_task = asyncio.create_task(self._receive_loop())
+        await self._flush_pending_tool_responses()
 
     def _schedule_reconnect(self):
         """The ONE owner of reconnection (v3.6 fix).
@@ -468,6 +475,7 @@ class GeminiLiveSession:
                       f"(reconnect #{self.reconnect_count})", flush=True)
                 await self._on_status("connected", "JARVIS phir se connected hai.")
                 self._recv_task = asyncio.create_task(self._receive_loop())
+                await self._flush_pending_tool_responses()
                 return
             if self._resumption_handle:
                 # A stale resumption handle can make every attempt
@@ -651,18 +659,73 @@ class GeminiLiveSession:
         self._last_tool_at = time.monotonic()
         responses = []
         for call in function_calls:
+            args = dict(call.args or {})
+            _args_short = str(args)
+            if len(_args_short) > 120:
+                _args_short = _args_short[:120] + "..."
+            print(f"  [tool] {call.name} called with {_args_short}",
+                  flush=True)
             _t0 = time.monotonic()
-            result = await self._tools.execute(call.name, dict(call.args or {}))
+            try:
+                result = await self._tools.execute(call.name, args)
+            except Exception as exc:  # noqa: BLE001 - reported, never fatal
+                result = {"status": "error",
+                          "message": exc.__class__.__name__}
             _dt = time.monotonic() - _t0
-            if _dt > 0.3:  # slow tool = slow reply; make it visible in the terminal
-                print(f"  [tool] {call.name}: {_dt:.1f}s", flush=True)
+            _status = (result or {}).get("status", "?")
+            print(f"  [tool] {call.name} -> {_status} ({_dt:.1f}s)",
+                  flush=True)
+            if _status == "typed":
+                print(f"  [tool] type_text typed "
+                      f"{(result or {}).get('chars', 0)} chars",
+                      flush=True)
+            if _status == "error":
+                print(f"  [tool] error: {call.name}: "
+                      f"{(result or {}).get('message', '')}", flush=True)
             kwargs = {"name": call.name, "response": result}
             if getattr(call, "id", None):
                 kwargs["id"] = call.id
             responses.append(types.FunctionResponse(**kwargs))
+        await self._deliver_tool_responses(responses)
+
+    async def _deliver_tool_responses(self, responses):
+        """Send tool results back to the model - ALWAYS (v3.13). If
+        the connection dropped while the tool was running, the send
+        fails here: queue the responses instead of dropping them,
+        and flush them on the next (re)connected session, so the
+        model never hangs and never falsely says 'done'."""
+        if not responses:
+            return
+        session = self._session
+        if session is None:
+            self._pending_tool_responses.extend(responses)
+            print(f"  [tool] {len(responses)} tool result(s) queue "
+                  f"kiye - connection nahi hai, reconnect par bhejunga",
+                  flush=True)
+            return
         try:
-            await self._session.send_tool_response(
+            await session.send_tool_response(
                 function_responses=responses
             )
         except Exception:
-            pass  # never let a tool reply kill the voice session
+            self._pending_tool_responses.extend(responses)
+            print(f"  [tool] {len(responses)} tool result(s) bhej "
+                  f"nahi paya - queue kiye, reconnect par bhejunga",
+                  flush=True)
+
+    async def _flush_pending_tool_responses(self):
+        """Deliver queued tool results on the fresh session."""
+        if not self._pending_tool_responses or self._session is None:
+            return
+        pending, self._pending_tool_responses = (
+            self._pending_tool_responses, [])
+        try:
+            await self._session.send_tool_response(
+                function_responses=pending
+            )
+            print(f"  [tool] queue wale {len(pending)} tool result(s) "
+                  f"reconnect ke baad bhej diye", flush=True)
+        except Exception:
+            self._pending_tool_responses = pending + self._pending_tool_responses
+            print("  [tool] queue flush phir fail - result rakhe hain, "
+                  "agle reconnect par try hoga", flush=True)

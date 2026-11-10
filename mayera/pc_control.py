@@ -82,8 +82,11 @@ _PRESS_KEYS = {
 
 
 def _default_runner(cmd):
-    subprocess.run(cmd, timeout=20, check=False,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # subprocess.Popen (v3.13, user's spec): launching an app must
+    # never block - the window-appear poll in open_app is what waits,
+    # so a slow Windows 11 Notepad cannot stall the voice loop.
+    subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL)
 
 
 def _default_volume(action, steps):
@@ -97,10 +100,30 @@ def _default_volume(action, steps):
         user32.keybd_event(code, 0, 2, 0)  # KEYEVENTF_KEYUP
 
 
-def _default_typer(text):
-    """Put the text on the clipboard and press Ctrl+V in the front
-    window - far more reliable than simulated keystrokes, and it
-    handles Hindi/Unicode text correctly."""
+def _ctypes_clipboard_get():
+    """Current clipboard text via ctypes, or None if not text."""
+    import ctypes
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    kernel32.GlobalLock.restype = ctypes.c_void_p
+    if not user32.OpenClipboard(0):
+        return None
+    try:
+        handle = user32.GetClipboardData(13)  # CF_UNICODETEXT
+        if not handle:
+            return None
+        ptr = kernel32.GlobalLock(handle)
+        if not ptr:
+            return None
+        try:
+            return ctypes.wstring_at(ptr)
+        finally:
+            kernel32.GlobalUnlock(handle)
+    finally:
+        user32.CloseClipboard()
+
+
+def _ctypes_clipboard_set(text):
     import ctypes
     user32 = ctypes.windll.user32
     kernel32 = ctypes.windll.kernel32
@@ -118,8 +141,59 @@ def _default_typer(text):
         user32.SetClipboardData(13, handle)  # CF_UNICODETEXT
     finally:
         user32.CloseClipboard()
+
+
+def _ctrl_v():
+    import ctypes
+    user32 = ctypes.windll.user32
     for vk, flags in ((0x11, 0), (0x56, 0), (0x56, 2), (0x11, 2)):
         user32.keybd_event(vk, 0, flags, 0)  # Ctrl down, V down, V up, Ctrl up
+
+
+def _default_typer(text):
+    """Paste-type via the clipboard + Ctrl+V - never simulated
+    keystrokes, so Hindi/Hinglish and special characters work
+    (pyautogui.write cannot type them).
+
+    v3.13 (user's spec): pyperclip + pyautogui are used when they
+    are installed, with the pure-ctypes path as fallback, and the
+    user's PREVIOUS clipboard content is preserved and restored
+    afterwards - JARVIS must not silently eat what he had copied.
+    """
+    previous = None
+    have_previous = False
+    try:
+        import pyperclip
+        try:
+            previous = pyperclip.paste()
+            have_previous = isinstance(previous, str)
+        except Exception:  # noqa: BLE001 - clipboard may hold non-text
+            have_previous = False
+        pyperclip.copy(text)
+        try:
+            import pyautogui
+            pyautogui.FAILSAFE = True
+            pyautogui.hotkey("ctrl", "v")
+        except ImportError:
+            _ctrl_v()
+    except ImportError:
+        try:
+            previous = _ctypes_clipboard_get()
+            have_previous = previous is not None
+        except Exception:  # noqa: BLE001
+            have_previous = False
+        _ctypes_clipboard_set(text)
+        _ctrl_v()
+    if have_previous:
+        time.sleep(0.25)  # let the paste land before restoring
+        try:
+            import pyperclip
+            pyperclip.copy(previous)
+        except ImportError:
+            try:
+                _ctypes_clipboard_set(previous)
+            except Exception:  # noqa: BLE001 - restore is best-effort
+                pass
 
 
 def _default_focuser(image, timeout):
@@ -175,6 +249,73 @@ def _default_focuser(image, timeout):
             return user32.GetForegroundWindow() == found[0]
         time.sleep(0.1)
     return False
+
+
+def _default_title_focuser(title_part, timeout):
+    """focus_window's OS layer (v3.13, user's spec): find a window
+    whose TITLE contains title_part (e.g. 'Notepad'), restore it if
+    minimized, activate it, wait ~0.5s, verify it is in front.
+    pygetwindow is tried first (the spec's stack); the ctypes
+    EnumWindows path is the fallback when it is not installed."""
+    target = (title_part or "").strip().lower()
+    if not target:
+        return False
+    deadline = time.monotonic() + max(0.5, float(timeout or 0))
+    try:
+        import pygetwindow as gw
+        while time.monotonic() <= deadline:
+            for win in gw.getAllWindows():
+                if target in (win.title or "").lower():
+                    try:
+                        if win.isMinimized:
+                            win.restore()
+                        win.activate()
+                    except Exception:  # noqa: BLE001 - try next window
+                        continue
+                    time.sleep(0.5)
+                    if win.isActive:
+                        return True
+            time.sleep(0.3)
+        return False
+    except ImportError:
+        pass
+    import ctypes
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    enum_proc = ctypes.WINFUNCTYPE(
+        ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+    found = [None]
+
+    def _cb(hwnd, _lparam):
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        buf = ctypes.create_unicode_buffer(512)
+        user32.GetWindowTextW(hwnd, buf, 512)
+        if target in buf.value.lower():
+            found[0] = hwnd
+            return False
+        return True
+
+    while time.monotonic() <= deadline:
+        found[0] = None
+        user32.EnumWindows(enum_proc(_cb), 0)
+        if found[0]:
+            if user32.IsIconic(found[0]):
+                user32.ShowWindow(found[0], 9)  # SW_RESTORE
+            user32.SetForegroundWindow(found[0])
+            time.sleep(0.5)
+            if user32.GetForegroundWindow() == found[0]:
+                return True
+        time.sleep(0.3)
+    return False
+
+
+def _default_clicker_at(x, y, button, double):
+    """Move to absolute (x, y) and click there (v3.13 click tool)."""
+    import ctypes
+    ctypes.windll.user32.SetCursorPos(int(x), int(y))
+    time.sleep(0.05)
+    _default_clicker(button, double)
 
 
 def _default_screenshot(path):
@@ -259,7 +400,8 @@ class PcController:
     def __init__(self, is_windows=None, runner=None, volumer=None,
                  typer=None, shooter=None, opener=None, home=None,
                  mover=None, clicker=None, scroller=None, keyer=None,
-                 focuser=None, sleeper=None, bytes_capturer=None):
+                 focuser=None, sleeper=None, bytes_capturer=None,
+                 title_focuser=None, clicker_at=None):
         self._win = (sys.platform.startswith("win")
                      if is_windows is None else is_windows)
         self._runner = runner or _default_runner
@@ -275,7 +417,17 @@ class PcController:
         self._focuser = focuser or _default_focuser
         self._sleep = sleeper or time.sleep
         self._bytes_capturer = bytes_capturer
+        self._title_focuser = title_focuser or _default_title_focuser
+        self._clicker_at = clicker_at or _default_clicker_at
         self._last_open = None  # (process image, monotonic time)
+        # pyautogui FAILSAFE (v3.13, user's spec): slamming the mouse
+        # into a screen corner aborts pyautogui actions. Best-effort -
+        # pyautogui is optional, the ctypes paths do not need it.
+        try:
+            import pyautogui
+            pyautogui.FAILSAFE = True
+        except Exception:  # noqa: BLE001 - optional dependency
+            pass
 
     def _guard(self):
         if not self._win:
@@ -304,7 +456,12 @@ class PcController:
         image = CLOSE_APPS.get(self._norm(app))
         focused = False
         if image:
-            focused = bool(self._focuser(image, 2.5))
+            # v3.13: poll up to ~8s (user's spec) - the focuser
+            # returns the moment the window is in front, so a fast
+            # app costs nothing; a slow Windows 11 Notepad (which
+            # can take several seconds on first open) is no longer
+            # reported ready before its window even exists.
+            focused = bool(self._focuser(image, 8.0))
             self._last_open = (image, time.monotonic())
         return {"status": "opened", "app": app, "focused": focused}
 
@@ -336,7 +493,27 @@ class PcController:
         self._volumer(action, steps)
         return {"status": "ok", "action": action, "steps": steps}
 
-    def type_text(self, text):
+    def focus_window(self, title_part):
+        """Bring the window whose title contains title_part (e.g.
+        'Notepad') to the front: restore if minimized, activate,
+        verify. Retries a few times (v3.13, user's spec). Returns
+        True/False - callers must treat False as 'do not type'."""
+        blocked = self._guard()
+        if blocked:
+            return False
+        title_part = (title_part or "").strip()
+        if not title_part:
+            return False
+        for _attempt in range(3):
+            try:
+                if self._title_focuser(title_part, 2.0):
+                    return True
+            except Exception:  # noqa: BLE001 - a failed try is a retry
+                pass
+            self._sleep(0.3)
+        return False
+
+    def type_text(self, text, window_title=None):
         blocked = self._guard()
         if blocked:
             return blocked
@@ -345,9 +522,23 @@ class PcController:
             return {"status": "error", "message": "khaali text"}
         if len(text) > 2000:
             text = text[:2000]
+        # v3.13: when a target window is named (the spec's
+        # type_text(text, window_title='Notepad')), focus THAT
+        # window by title first - and if it cannot be focused, do
+        # NOT paste at all: pasting into the wrong window is exactly
+        # the 'Notepad khulta hai, likhta nahi / text gayab' bug.
+        if window_title:
+            if not self.focus_window(window_title):
+                return {"status": "error",
+                        "message": f"'{window_title}' window saamne "
+                                   "nahi la paya - text nahi likha, "
+                                   "galat window me chala jata."}
+            self._sleep(0.25)
+            self._typer(text)
+            return {"status": "typed", "chars": len(text),
+                    "focused_window": window_title}
         # v3.10: if an app was opened a moment ago, RE-FOCUS its
-        # window first and let focus settle, then paste - this is
-        # the actual fix for 'Notepad khulta hai, likhta nahi'.
+        # window first and let focus settle, then paste.
         refocused = False
         if self._last_open:
             image, when = self._last_open
@@ -404,6 +595,38 @@ class PcController:
         self._scroller(direction, amount)
         return {"status": "scrolled", "direction": direction,
                 "amount": amount}
+
+    def click(self, x, y, button="left", double=False):
+        """Move to absolute screen point (x, y) and click there
+        (v3.13, user's spec names: click(x, y)). Coordinates must
+        come from a look_at_screen check first - never blind."""
+        blocked = self._guard()
+        if blocked:
+            return blocked
+        try:
+            x, y = int(x), int(y)
+        except (TypeError, ValueError):
+            return {"status": "error", "message": "x, y number hone chahiye"}
+        if x < 0 or y < 0 or x > 10000 or y > 10000:
+            return {"status": "error", "message": "x, y screen ke bahar hain"}
+        button = (button or "left").strip().lower()
+        if button not in ("left", "right"):
+            return {"status": "error", "message": "button left/right ho"}
+        self._clicker_at(x, y, button, bool(double))
+        return {"status": "clicked", "x": x, "y": y,
+                "button": button, "double": bool(double)}
+
+    def scroll(self, amount):
+        """Scroll by a signed amount (v3.13, user's spec name:
+        scroll(amount)): positive = down, negative = up."""
+        try:
+            amount = int(amount)
+        except (TypeError, ValueError):
+            return {"status": "error", "message": "amount number ho"}
+        if amount == 0:
+            return {"status": "error", "message": "amount 0 hai"}
+        direction = "down" if amount > 0 else "up"
+        return self.mouse_scroll(direction, abs(amount))
 
     def press_key(self, key):
         blocked = self._guard()

@@ -579,3 +579,55 @@ config builds with 16 tools + regressions 12/12 + 14/14 + 15/15 +
 8/8. The vision call itself runs on his PC with his key (Windows
 capture + real Gemini vision are not exercisable here); first live
 check: 'JARVIS, screen par kya hai?'
+
+--- v3.13.0 addendum (2026-11-10): NOTEPAD-FIX SPEC (user's task brief) ---
+User's brief: make "open Notepad and write" reliable + fix Live drops.
+Code was re-read first (live.connect path, declarations, tool loop).
+ALREADY PRESENT and verified in code (brief section 4): session
+resumption handle stored + reused, go_away -> proactive reconnect
+(single owner), context-window compression (sliding window), audio
+16-bit PCM 16kHz in / 24kHz out, blocking tools via asyncio.to_thread,
+every tool wrapped in try/except returning an error dict. The frequent
+"Dobara try 1/5" drops in his log are mostly the Gemini Live session
+time limit + the per-turn reconnect bug already fixed in v3.11.
+BUILT in v3.13:
+(1) pc_control: app launch now via subprocess.Popen (never blocks);
+open_app window poll 2.5s -> 8s (returns the moment the window is in
+front; slow Win11 Notepad now covered). NEW focus_window(title_part):
+pygetwindow first (find title-contains, restore if minimized,
+activate, 0.5s settle, verify active), ctypes EnumWindows-by-title
+fallback, 3 retries. type_text(text, window_title): focuses the named
+window by title first and REFUSES to type if focus fails (no more
+paste into the wrong window); clipboard typing now preserves and
+restores the user's previous clipboard text; pyperclip+pyautogui
+preferred, ctypes fallback; pyautogui.FAILSAFE=True set when present.
+NEW tools click(x, y) (coords only from look_at_screen) and
+scroll(amount) (signed) - declarations now 18, names exactly matching
+the brief (open_app(name), type_text(text, window_title),
+take_screenshot(), press_key(key), click(x, y), scroll(amount)).
+(2) gemini_live tool loop: EVERY call now logs "[tool] <name> called
+with ...", its result status + time, "type_text typed N chars", and
+"[tool] error: ..." lines. NEW pending-response queue: if the
+connection drops mid-tool-call and send_tool_response fails, results
+are queued and flushed on the (re)connected session (proven by test
+with a dead fake session) - the model never hangs and never loses a
+finished action's result.
+(3) System prompt gains the brief's Notepad workflow section VERBATIM
+(plus one line: window_title='Notepad' + look_at_screen to verify).
+(4) main.py: global Ctrl+Shift+Q emergency-stop hotkey via the
+`keyboard` package (soft-fails with a note if unavailable).
+(5) requirements.txt += pyautogui, pyperclip, pygetwindow, mss,
+Pillow, keyboard - all optional at runtime (ctypes fallbacks), so a
+failed optional install can never break the voice assistant.
+(6) test_notepad.py shipped in the package (auto-update delivers it):
+voice-free test printing every step, typing an English line + a
+Hindi line, with the troubleshooting checklist in its header (focus,
+Administrator/UIPI level match, slow Win11 Notepad warm-up, Hindi =
+clipboard paste + font boxes note, clipboard managers, verify via
+"screen par kya hai?").
+Tests: 42/42 new (~/workspace/test_notepad_fix.py) + regressions
+12/12 + 14/14 + 15/15 (expectations updated 2.5s -> 8s) + 8/8 +
+49/49 (declaration count updated 16 -> 18). Windows-only effectors
+(pygetwindow/pyperclip/pyautogui on his PC, elevated-window cases)
+can only be proven on his PC: run test_notepad.py first, then the
+voice sentence.

@@ -23,6 +23,7 @@ mayera/screen_vision.py
 mayera/tools.py
 mayera/youtube_play.py
 requirements.txt
+test_notepad.py
 static/app.js
 static/flow.js
 static/index.html

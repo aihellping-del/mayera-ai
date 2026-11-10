@@ -130,9 +130,14 @@ def function_declarations():
         types.FunctionDeclaration(
             name="type_text",
             description=(
-                "Type text the user dictates into the window currently "
-                "in front on his PC (e.g. he opened Notepad and says "
-                "'likho: ...'). Pass the exact text to type."
+                "Type text the user dictates into a window on his PC "
+                "(e.g. he opened Notepad and says 'likho: ...'). Pass "
+                "the exact text. window_title names the target window "
+                "(e.g. 'Notepad'): that window is focused FIRST, and "
+                "if it cannot be focused the text is NOT typed at all "
+                "(an error comes back) - so text can never land in "
+                "the wrong window. For Notepad, always pass "
+                "window_title='Notepad'."
             ),
             parameters=types.Schema(
                 type=types.Type.OBJECT,
@@ -140,7 +145,13 @@ def function_declarations():
                     "text": types.Schema(
                         type=types.Type.STRING,
                         description="The exact text to type.",
-                    )
+                    ),
+                    "window_title": types.Schema(
+                        type=types.Type.STRING,
+                        description="Target window title, e.g. "
+                                    "'Notepad'. Omit only when typing "
+                                    "into whatever window is in front.",
+                    ),
                 },
                 required=["text"],
             ),
@@ -220,6 +231,56 @@ def function_declarations():
                     ),
                 },
                 required=["direction"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="click",
+            description=(
+                "Move the mouse to an exact screen point (x, y in "
+                "pixels) and click there. Use ONLY with coordinates "
+                "you got from look_at_screen - never guess a point. "
+                "button 'left' (default) or 'right'; double=true for "
+                "a double click."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "x": types.Schema(
+                        type=types.Type.INTEGER,
+                        description="Horizontal pixel position.",
+                    ),
+                    "y": types.Schema(
+                        type=types.Type.INTEGER,
+                        description="Vertical pixel position.",
+                    ),
+                    "button": types.Schema(
+                        type=types.Type.STRING,
+                        description="'left' or 'right'.",
+                    ),
+                    "double": types.Schema(
+                        type=types.Type.BOOLEAN,
+                        description="True for a double click.",
+                    ),
+                },
+                required=["x", "y"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="scroll",
+            description=(
+                "Scroll the page under the mouse by a signed amount: "
+                "positive scrolls DOWN, negative scrolls UP "
+                "(1-20 steps, e.g. 5 = a bit down, -5 = a bit up)."
+            ),
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "amount": types.Schema(
+                        type=types.Type.INTEGER,
+                        description="Signed scroll amount, -20 to 20.",
+                    )
+                },
+                required=["amount"],
             ),
         ),
         types.FunctionDeclaration(
@@ -361,7 +422,8 @@ class ToolExecutor:
                 }
             if name in ("open_app", "close_app", "set_volume",
                         "type_text", "take_screenshot", "mouse_move",
-                        "mouse_click", "mouse_scroll", "press_key"):
+                        "mouse_click", "mouse_scroll", "press_key",
+                        "click", "scroll"):
                 # PC actions can block briefly (process start, a
                 # PowerShell screenshot) - keep them off the event
                 # loop so live audio never stalls.
@@ -393,7 +455,14 @@ class ToolExecutor:
             return self._pc.set_volume(args.get("action", ""),
                                        args.get("steps", 3))
         if name == "type_text":
-            return self._pc.type_text(args.get("text", ""))
+            return self._pc.type_text(args.get("text", ""),
+                                      args.get("window_title") or None)
+        if name == "click":
+            return self._pc.click(args.get("x", -1), args.get("y", -1),
+                                  args.get("button", "left"),
+                                  args.get("double", False))
+        if name == "scroll":
+            return self._pc.scroll(args.get("amount", 0))
         if name == "mouse_move":
             return self._pc.mouse_move(args.get("direction", ""),
                                        args.get("percent", 20))

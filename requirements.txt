@@ -5,3 +5,17 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 google-genai>=1.0
 websockets>=12.0
+
+# Windows PC control helpers (v3.13): window focus by title
+# (pygetwindow), clipboard paste for Hindi/Unicode text (pyperclip),
+# mouse/keyboard automation with FAILSAFE (pyautogui), fast screen
+# capture (mss), image handling (Pillow), and the global
+# Ctrl+Shift+Q emergency-stop hotkey (keyboard). JARVIS falls back
+# to its built-in ctypes paths if any of these is missing, so a
+# failed optional install never breaks the voice assistant.
+pyautogui
+pyperclip
+pygetwindow
+mss
+Pillow
+keyboard

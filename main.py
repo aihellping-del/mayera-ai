@@ -631,8 +631,34 @@ def ensure_api_key():
     )
 
 
+def _install_stop_hotkey():
+    """Global Ctrl+Shift+Q = JARVIS ko turant band karo (v3.13,
+    user's spec). Uses the `keyboard` package when installed; any
+    failure (not installed, no permission) is soft - the Settings
+    exit button and Ctrl+C keep working exactly as before."""
+    try:
+        import keyboard
+    except Exception:  # noqa: BLE001 - optional dependency
+        print("  Note: 'keyboard' package nahi mila - Ctrl+Shift+Q "
+              "hotkey band rahegi, Ctrl+C se band hoga.")
+        return
+
+    def _stop():
+        print("\n  Ctrl+Shift+Q dabaya gaya - JARVIS band ho raha hai.")
+        os.kill(os.getpid(), signal.SIGINT)
+
+    try:
+        keyboard.add_hotkey("ctrl+shift+q", _stop)
+        print("  Emergency stop: Ctrl+Shift+Q (kahin se bhi dabao, "
+              "JARVIS turant band).")
+    except Exception:  # noqa: BLE001 - e.g. needs admin on some PCs
+        print("  Note: Ctrl+Shift+Q hotkey register nahi ho payi "
+              "(terminal ko Administrator se chalakar dekho).")
+
+
 def main():
     ensure_api_key()
+    _install_stop_hotkey()
     url = f"http://{config.HOST}:{config.PORT}"
     if os.environ.get("MAYERA_NO_BROWSER") != "1":
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
