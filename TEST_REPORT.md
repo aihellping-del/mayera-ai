@@ -498,3 +498,28 @@ unless the mic RMS is >= 0.22 (real close speech / barge-in
 always passes at full volume). AEC was already on in
 getUserMedia; this covers loud-speaker leakage AEC misses.
 Regressions 12/12 + 14/14; app.js passes node --check.
+
+--- v3.11.0 addendum (2026-11-10): THE PER-TURN RECONNECT BUG ---
+User's screenshot (12:18-12:20): SEVEN reconnects in ~2 minutes,
+each ~1s, replies in between fast (avg ~2.5s) - plus his report:
+disconnect right after opening something, and lines spoken twice.
+ROOT CAUSE (proven from the installed google-genai source,
+live.py AsyncSession.receive): receive() ENDS when a turn
+completes - "if _is_interaction_complete(...): yield; break".
+v3.6's fix for the dead-session hang treated every stream end as
+a disconnect (break -> reconnect), so nearly every completed turn
+- and especially tool-call turns, e.g. opening an app - forced a
+reconnect, and on each resume the model repeated itself. The
+v3.6/v3.7 fake-session tests encoded the wrong assumption
+(receive ends only on disconnect), which is why they passed while
+the real app misbehaved. Fix in _receive_loop: turn-end now loops
+back into receive() on the SAME session; a truly dead session is
+detected as 3 consecutive instantly-empty receive() runs (<0.5s,
+no messages) -> only then reconnect (the spin-guard sleeps 0.1s
+between empty runs). New tests model the REAL SDK semantics
+(~/workspace/test_turnloop.py): 3 turns on one connection with
+zero reconnects; dead-after-turn and dead-from-start still
+reconnect exactly once. Suites: 8/8 new + 12/12 + 14/14 (one
+test_v37 assertion updated: its backoff filter now excludes the
+loop's 0.1s pauses). Lesson recorded: fake the SDK's documented
+behaviour, not your assumption about it.

@@ -544,19 +544,42 @@ class GeminiLiveSession:
         # Bound to ONE session instance: if the session is replaced
         # (reconnect) or the app stops, this loop simply exits.
         session = self._session
+        empty_fast = 0
         try:
             while not self._stopped and self._session is session:
+                run_started = time.monotonic()
+                got = 0
                 async for response in session.receive():
                     if self._stopped or self._session is not session:
                         return
+                    got += 1
                     self._last_msg_at = time.monotonic()
                     await self._handle_response(response)
-                # receive() ended on its own: the server closed the
-                # session (Gemini Live sessions have a time limit).
-                # Before v3.6 this loop called receive() on the dead
-                # session forever - JARVIS looked connected, was not,
-                # and no reconnect ever started.
-                break
+                # receive() ending is NORMAL, not a disconnect: the
+                # google-genai SDK ends receive() when a TURN
+                # completes (live.py receive(): "if
+                # _is_interaction_complete(...): yield; break").
+                # v3.6 wrongly treated every turn-end as a dead
+                # session and reconnected - his 2026-11-10 log shows
+                # 7 reconnects in 2 minutes, right after replies and
+                # tool calls, and the model repeated itself on every
+                # resume ("ek baat 2 bar bolta hai"). So: loop around
+                # and listen for the next turn on the SAME session.
+                if got:
+                    empty_fast = 0
+                    continue
+                # A run with NO messages at all is the suspicious
+                # one: a truly dead session's receive() comes back
+                # instantly-empty forever (the original v3.6 hang,
+                # where JARVIS looked connected but was not). Three
+                # fast empty runs in a row = really gone: reconnect.
+                if time.monotonic() - run_started < 0.5:
+                    empty_fast += 1
+                    if empty_fast >= 3:
+                        break
+                    await asyncio.sleep(0.1)
+                else:
+                    empty_fast = 0
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001
