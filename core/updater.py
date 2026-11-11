@@ -139,7 +139,12 @@ def _fetch_verified(rel, expected_hash, token=None):
     last_error = None
     for attempt in range(attempts):
         data = _fetch(rel, token)
-        if not data:
+        if not data and not expected_hash:
+            # No checksum to verify against: an empty body still
+            # means a broken download. WITH a checksum the hash
+            # below decides - a legitimately empty file (an empty
+            # __init__.py, v3.35.2) verifies against the empty hash
+            # instead of aborting the whole update.
             raise ValueError(f"empty download: {rel}")
         if not expected_hash:
             return data

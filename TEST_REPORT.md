@@ -1421,3 +1421,27 @@ GL Trader files. Fix: checksums.txt no longer lists itself
 still downloaded with every update, just not self-verified.
 Verified by a fake v3.34.0 install self-updating from the
 LIVE repo to v3.35.1 with GL Trader files arriving.
+
+--- v3.35.2 addendum (2026-11-11): WHY THE GL TRADER UPDATE ---
+--- NEVER LANDED (two poison files, both in the channel) ---
+The user restarted repeatedly; every start printed the update
+line, JARVIS opened - on the OLD version, with no GL Trader
+files. Full channel audit (all 88 content hashes verified
+against checksums.txt) found the two abort causes:
+(1) v3.35.0's checksums.txt contained an entry for ITSELF; a
+file can never match its own embedded hash, so the verified
+updater retried and aborted the WHOLE update every time.
+(Fixed in v3.35.1 by removing the self-entry.)
+(2) Six JARVIS_GL_TRADER subpackage __init__.py files were
+EMPTY (0 bytes). The updater treated any empty download as a
+broken fetch and raised before hashing - so even with correct
+checksums the update aborted. His installed updater has that
+same rule, so the channel itself had to change: the six files
+now carry a one-line docstring each, and the updater is
+additionally hardened - with a checksum present, the HASH
+decides (an empty file verifying against the empty hash is
+accepted), so no future empty file can brick an update again.
+Release rule reinforced: checksums.txt NEVER lists itself,
+and the fake-install proof (old install, OLD updater code,
+new files deleted) is run before calling any version done -
+that exact test caught cause (2) after cause (1) was fixed.
