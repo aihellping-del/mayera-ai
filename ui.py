@@ -128,9 +128,15 @@ def open_ui_later(url, delay=1.2):
 # Owner ki pasand ka chhota robot (dashboard/robot.html) ek alag
 # chhoti Chrome --app window me screen ke neeche-dayein kone me
 # rehta hai aur JARVIS ki haalat (bol/sun/soch) par react karta
-# hai. Ye sirf ek chehra hai - mic/audio badi HUD ke paas hi
-# rehte hain. MAYERA_NO_ROBOT=1 se band. Har nakami sirf log
-# hoti hai; robot ki wajah se JARVIS kabhi nahi rukta.
+# hai. MAYERA_NO_ROBOT=1 se band. Har nakami sirf log hoti
+# hai; robot ki wajah se JARVIS kabhi nahi rukta.
+#
+# v3.37 - robot hi JARVIS hai (owner: "Agent RoBot Chaiye
+# tha"): robot page ab khud voice client hai (mic + /ws +
+# Gemini playback usi window me), isliye default launch me
+# SIRF robot khulta hai, badi HUD nahi. Gear button se HUD
+# on-demand khulti hai (POST /open-hud). MAYERA_ROBOT_ONLY=0
+# par purana launch (HUD + robot + minimize watcher).
 # ------------------------------------------------------------------
 
 ROBOT_W = 280
@@ -259,9 +265,13 @@ def open_robot(url, finder=None, popen=None, pin=None):
     return f"app:{name}"
 
 
-def open_robot_later(base_url, delay=2.5):
-    """Startup ke thodi der baad robot window (fail-soft)."""
+def open_robot_later(base_url, delay=2.5, on_result=None):
+    """Startup ke thodi der baad robot window (fail-soft).
+    `on_result(mode)` diya ho to asal launch mode ke saath
+    bulaya jata hai - v3.37 ka robot-only launch is par
+    HUD-fallback ka faisla karta hai."""
     def _open():
+        mode = "skip"
         try:
             mode = open_robot(base_url.rstrip("/") +
                               "/static/robot.html")
@@ -269,8 +279,24 @@ def open_robot_later(base_url, delay=2.5):
                 print("  Robot Dost kone wali window me aa gaya "
                       "hai.", flush=True)
         except Exception:  # noqa: BLE001
-            pass
+            mode = "skip"
+        if on_result is not None:
+            try:
+                on_result(mode)
+            except Exception:  # noqa: BLE001
+                pass
     threading.Timer(delay, _open).start()
+
+
+def robot_only_enabled(env=None):
+    """v3.37 ka default launch faisla: sirf robot window.
+
+    MAYERA_ROBOT_ONLY=0 -> purana launch (HUD bhi khulegi).
+    MAYERA_NO_ROBOT=1 -> robot band hai, robot-only ka koi
+    matlab nahi (HUD hi chalegi)."""
+    env = os.environ if env is None else env
+    return (env.get("MAYERA_ROBOT_ONLY") != "0"
+            and env.get("MAYERA_NO_ROBOT") != "1")
 
 
 # ------------------------------------------------------------------

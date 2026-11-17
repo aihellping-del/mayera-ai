@@ -446,15 +446,33 @@ async def index():
 @app.get("/robot-status")
 async def robot_status():
     """v3.36 Robot Dost: aakhri UI status ka read-only aaina.
-    /ws par ek hi client reh sakta hai (badi HUD); robot window
-    is endpoint ko poll karke wahi haalat dikhati hai jo HUD ko
-    WebSocket par mili. Koi audio/mic is raaste par nahi jata."""
+    v3.37 se robot khud /ws client hai, isliye ye endpoint
+    ab sirf bahari jaanch ke liye rakha hai (aaina send_ui_
+    status waise hi bharta rehta hai). Koi audio/mic is
+    raaste par nahi jata."""
     at = _last_ui_status.get("at") or 0.0
     return {
         "state": _last_ui_status.get("state") or "idle",
         "message": _last_ui_status.get("message") or "",
         "age_s": (round(time.monotonic() - at, 1) if at else None),
     }
+
+
+@app.post("/open-hud")
+async def open_hud():
+    """v3.37: robot window ke gear button se badi HUD window
+    on-demand kholo (Settings waghera ke liye). HUD ka /ws
+    socket robot ke socket ki jagah le lega (ek-client
+    niyam) - ye jaan-boojh kar hai; robot use shaant
+    "badi window khuli hai" haalat me sambhalta hai.
+    Fail-soft: na khule to bhi robot chalta rehta hai."""
+    try:
+        mode = ui_mod.open_ui(f"http://{config.HOST}:{config.PORT}")
+        log.info("HUD robot ke gear button se kholi gayi (%s).", mode)
+        return {"opened": True, "mode": mode}
+    except Exception:  # noqa: BLE001 - HUD na khule to robot zinda rahe
+        log.warning("open-hud fail hua; robot window chalti rahegi.")
+        return {"opened": False}
 
 
 @app.get("/health")
@@ -893,20 +911,41 @@ def main():
     _install_stop_hotkey()
     url = f"http://{config.HOST}:{config.PORT}"
     if os.environ.get("MAYERA_NO_BROWSER") != "1":
-        ui_mod.open_ui_later(url)
-        # v3.36 Robot Dost: kone wali chhoti robot window
-        # (MAYERA_NO_ROBOT=1 se band; fail-soft, JARVIS nahi rukta)
-        if os.environ.get("MAYERA_NO_ROBOT") != "1":
-            ui_mod.open_robot_later(url)
-        # v3.36.1: badi HUD window call active hote hi ek baar
-        # minimize (owner: "sirf robot dikhe"). HUD BAND nahi
-        # hoti - wahi voice client hai. MAYERA_NO_AUTO_MINIMIZE=1
-        # par watcher band; fail-soft, JARVIS kabhi nahi rukta.
-        try:
-            ui_mod.start_hud_minimize_watcher(
-                lambda: _last_ui_status["state"])
-        except Exception:  # noqa: BLE001
-            pass
+        if ui_mod.robot_only_enabled():
+            # v3.37 - robot hi JARVIS hai (owner: "Agent RoBot
+            # Chaiye tha"): default me SIRF robot window khulti
+            # hai - wahi voice client hai (mic/awaaz usi me).
+            # Badi HUD gear button se on-demand (POST /open-hud).
+            # Minimize watcher yahan NAHI chalta - chhupane ko
+            # koi HUD hai hi nahi. Robot khulna fail ho jaye to
+            # JARVIS bekaar na rahe: HUD fallback khol do.
+            def _robot_fallback(mode, _url=url):
+                if not str(mode).startswith("app:"):
+                    print("  Robot window nahi khul payi - badi "
+                          "window khol raha hu taaki JARVIS band "
+                          "na rahe.", flush=True)
+                    try:
+                        ui_mod.open_ui_later(_url)
+                    except Exception:  # noqa: BLE001
+                        pass
+            ui_mod.open_robot_later(url, on_result=_robot_fallback)
+        else:
+            ui_mod.open_ui_later(url)
+            # v3.36 Robot Dost: kone wali chhoti robot window
+            # (MAYERA_NO_ROBOT=1 se band; fail-soft, JARVIS
+            # nahi rukta). MAYERA_ROBOT_ONLY=0 par hi yahan
+            # aate hain - purana launch vyavhaar.
+            if os.environ.get("MAYERA_NO_ROBOT") != "1":
+                ui_mod.open_robot_later(url)
+            # v3.36.1: badi HUD window call active hote hi ek
+            # baar minimize (owner: "sirf robot dikhe").
+            # MAYERA_NO_AUTO_MINIMIZE=1 par watcher band;
+            # fail-soft, JARVIS kabhi nahi rukta.
+            try:
+                ui_mod.start_hud_minimize_watcher(
+                    lambda: _last_ui_status["state"])
+            except Exception:  # noqa: BLE001
+                pass
     print()
     print("  ============================================")
     print("   JARVIS AI - Voice Companion")

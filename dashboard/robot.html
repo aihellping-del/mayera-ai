@@ -38,10 +38,6 @@
             <circle cx="70.5" cy="82" r="3.4" fill="#eafcff"/>
             <circle cx="123.5" cy="82" r="3.4" fill="#eafcff"/>
           </g>
-          <g class="heart-eyes" fill="#f2708a">
-            <path transform="translate(61.5 76)" d="M12 21C12 21 4 15.5 4 9.9 4 7 6.2 5 8.6 5c1.4 0 2.7.8 3.4 2 .7-1.2 2-2 3.4-2C17.8 5 20 7 20 9.9 20 15.5 12 21 12 21z"/>
-            <path transform="translate(114.5 76)" d="M12 21C12 21 4 15.5 4 9.9 4 7 6.2 5 8.6 5c1.4 0 2.7.8 3.4 2 .7-1.2 2-2 3.4-2C17.8 5 20 7 20 9.9 20 15.5 12 21 12 21z"/>
-          </g>
         </g>
         <!-- muh: chup -->
         <path class="mouth-idle" d="M90 116 Q100 123 110 116" stroke="#46d8e8" stroke-width="3.5" fill="none" stroke-linecap="round"/>
@@ -52,12 +48,6 @@
           <circle cx="152" cy="34" r="3.4"/>
           <circle cx="163" cy="24" r="4.4"/>
           <circle cx="176" cy="12" r="5.6"/>
-        </g>
-        <!-- pyaar wale udte dil -->
-        <g class="hearts">
-          <g transform="translate(156 30) scale(.9)"><path d="M12 21C12 21 4 15.5 4 9.9 4 7 6.2 5 8.6 5c1.4 0 2.7.8 3.4 2 .7-1.2 2-2 3.4-2C17.8 5 20 7 20 9.9 20 15.5 12 21 12 21z"/></g>
-          <g transform="translate(174 10) scale(.6)"><path d="M12 21C12 21 4 15.5 4 9.9 4 7 6.2 5 8.6 5c1.4 0 2.7.8 3.4 2 .7-1.2 2-2 3.4-2C17.8 5 20 7 20 9.9 20 15.5 12 21 12 21z"/></g>
-          <g transform="translate(138 6) scale(.55)"><path d="M12 21C12 21 4 15.5 4 9.9 4 7 6.2 5 8.6 5c1.4 0 2.7.8 3.4 2 .7-1.2 2-2 3.4-2C17.8 5 20 7 20 9.9 20 15.5 12 21 12 21z"/></g>
         </g>
         <!-- gardan + shareer -->
         <rect x="90" y="146" width="20" height="8" rx="3" fill="#9fb4bd"/>
@@ -79,6 +69,29 @@
     </svg>
 
     <div class="status-line" aria-hidden="true"></div>
+    <div class="status-text" id="statusText">JARVIS taiyaar hai</div>
+
+    <div class="controls">
+      <button class="mic-btn" id="btnMic" type="button"
+              aria-label="Baat shuru ya band karo"
+              title="Baat shuru / band">🎙️</button>
+    </div>
+    <button class="gear-btn" id="btnHud" type="button"
+            aria-label="Badi JARVIS window kholo"
+            title="Badi window (Settings)">⚙️</button>
+
+    <div class="hud-note" id="hudNote" hidden>
+      <p><strong>Badi window khuli hai</strong> — baat ab wahi se hogi.</p>
+      <p>Robot wapas chahiye to is chhoti window ko band karke JARVIS dobara chalao.</p>
+    </div>
+
+    <div class="confirm-box" id="confirmBox" hidden>
+      <p id="confirmText">Pakka karu?</p>
+      <div class="confirm-btns">
+        <button id="confirmYes" type="button">Haan</button>
+        <button id="confirmNo" type="button">Nahi</button>
+      </div>
+    </div>
   </div>
   <script src="/static/robot.js"></script>
 </body>

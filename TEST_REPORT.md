@@ -1587,3 +1587,82 @@ files byte-identical, dono sentinel byte-identical.
 Owner ka ekmatra bacha step: START_JARVIS.bat se ek
 restart - badi window khud minimize ho jayegi, sirf
 robot kone me dikhega aur idle par pyaar se bolega.
+
+================================================================
+v3.37.0 - "Robot hi JARVIS" (2026-11-17)
+================================================================
+Owner ka v3.36.1 par faisla (uske laptop se, restart ke baad):
+(1) badi HUD window phir bhi dikhi - ctypes auto-minimize
+asal Windows istemal me kaam nahi aaya, use fail mana gaya;
+(2) robot taiyaar caring lines apne aap bolta raha par uske
+sawalo ke jawab nahi deta - khud-bolna seedha REJECT ("apne
+se hi sab baat kar rha hai"); (3) uske asal shabd: "Agent
+RoBot Chaiye tha" - robot hi agent ho: woh robot se baat
+kare, robot sune, JARVIS ki asal awaaz me jawab de, kaam
+kare, aur screen par wahi ekmatra window ho.
+
+BADLAV:
+1. dashboard/robot.js POORA dobara likha - ab ye HUD
+   (app.js) wala asal voice client hai: mic getUserMedia ->
+   16 kHz PCM -> /ws; Gemini Live playback 24 kHz WebAudio
+   scheduling ke saath (wahi adaptive jitter buffer, overflow
+   guard, interruption flush, echo duck, playback stats jo
+   app.js me hai). Bolne ki haalat status jhandon se nahi,
+   ASAL scheduled playback se banti hai (audioPlaying()) -
+   muh speakLevel (asal audio ki taakat) se robot.js ke
+   animation loop me chalta hai. app.js/index.html bilkul
+   untouched, HUD pehle jaisi chalti hai.
+2. Controls robot window me: robot ya mic button par click
+   = baat shuru/band (start/stop); gear button = badi HUD
+   on-demand (POST /open-hud); confirmation card (Haan/Nahi,
+   /api/confirm) yahin aata hai - bina iske gated kaam
+   (trash_file / whatsapp_send / run_command) robot-only
+   mode me pure hi nahi hote. Push-to-Talk setting bhi
+   /api/settings se padhi jati hai; mic/speaker device ki
+   pasand HUD ke saath shared localStorage se aati hai.
+3. KHUD-BOLNA POORA HATA: speechSynthesis caring awaaz,
+   idle caring cycle, caring lines (Roman + Devanagari),
+   bubble ke nishan, dil-wali-aankhein/udte-dil visuals -
+   sab robot files se gayab. Robot ab SIRF JARVIS ki asal
+   Gemini Live awaaz bolta hai. SYSTEM_INSTRUCTION aur
+   personality bilkul untouched (conversation ke andar ki
+   caring wahi rehti hai).
+4. Launch (main.py + ui.py): default me SIRF robot window
+   khulti hai (ui.robot_only_enabled); HUD nahi khulti.
+   POST /open-hud (fail-soft) gear button se open_ui()
+   chalata hai. MAYERA_ROBOT_ONLY=0 -> purana launch (HUD +
+   robot + v3.36.1 minimize watcher, jaisa tha). MAYERA_
+   NO_ROBOT=1 -> sirf HUD (purana). Robot launch fail ho
+   jaye to HUD fallback khul jata hai taaki JARVIS kabhi
+   bekaar na rahe (log ke saath). Robot-only mode me
+   minimize watcher NAHI chalta - chhupane ko HUD hai hi
+   nahi.
+5. EK-CLIENT NIYAM BARKARAR: connection_manager bilkul
+   untouched - ek hi /ws client. Gear se HUD khule to uska
+   socket robot ke socket ki jagah le leta hai (server
+   "Replaced by a new connection" reason se band karta
+   hai); robot.js use pehchan kar shaant "badi window
+   khuli hai" (is-hudopen) haalat dikhata hai, mic/playback
+   band kar deta hai aur dobara connect ki daud NAHI
+   lagata. Robot wapas chahiye to robot window band karke
+   JARVIS dobara chalana hoga (ya HUD band karke bhi robot
+   window dobara kholni hogi) - ye seema jaan-boojh kar
+   rakhi hai taaki do socket kabhi ladein nahi.
+
+TESTS: test_robot_pet.py 77/77 passed (purane 62 me se
+robot-page wale purane check v3.37 ke check se badle;
+naye: /ws connect + getUserMedia + playback graph +
+interruption flush maujood, bolna asal playback se,
+toggleCall start/stop, gear /open-hud, confirm card,
+hudopen sambhal; speechSynthesis + saari 10 caring lines
++ CARE_/is-caring/hearts nishan robot files me NAHI;
+robot_only_enabled teeno env; launch matrix nakli
+launchers se - robot-only me HUD nahi, robot fail par HUD
+fallback, ROBOT_ONLY=0 par HUD+robot, NO_ROBOT=1 par sirf
+HUD; open_robot_later on_result mode deta hai; watcher
+robot-only branch me nahi). node --check robot.js + app.js
+OK; py_compile ui.py + main.py OK. Regression:
+test_chrome_only 5/5 (is VM par fastapi nahi, halke stub
+ke saath - pichhle releases ki tarah), test_updater_
+checksums 4/4.
+FAKE-INSTALL PROOF: neeche addendum me (stub + live).

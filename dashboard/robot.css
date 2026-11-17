@@ -1,15 +1,16 @@
-/* JARVIS Robot Dost (v3.36) - kone wali chhoti robot window.
-   Design owner ke approved namune (jarvis-robot-namuna) se liya
-   gaya hai: gol sar, chamakta antenna, badi aankhein, chhota muh,
-   caring mode me dil wali aankhein + gulabi gaal + udte dil.
-   Haalat body ki class se badalti hai (robot.js lagata hai):
-   is-idle / is-listening / is-speaking / is-thinking /
-   is-caring / is-error. */
+/* JARVIS Robot Dost (v3.37) - kone wali chhoti robot window,
+   ab yahi JARVIS ka asal voice client hai (mic + awaaz isi
+   window se). Design owner ke approved namune
+   (jarvis-robot-namuna) se liya gaya hai: gol sar, chamakta
+   antenna, badi aankhein, chhota muh. Haalat stage ki class
+   se badalti hai (robot.js lagata hai): is-idle /
+   is-listening / is-speaking / is-thinking / is-error /
+   is-hudopen (badi window ne socket le liya). Khud-bolne
+   wala andaaz v3.37 me poora hata diya gaya hai. */
 
 :root {
   --accent: #2bb3bf;
   --amber: #e8a13a;
-  --care: #f2708a;
   --line-green: #35d07f;
 }
 
@@ -59,15 +60,16 @@ html, body {
 @keyframes wander { 0%, 100% { transform: translateX(-5px); } 50% { transform: translateX(5px); } }
 
 .mouth-talk { display: none; transform-box: fill-box; transform-origin: center; }
-.is-speaking .mouth-talk { display: block; animation: talk .28s ease-in-out infinite alternate; }
+.is-speaking .mouth-talk { display: block; }
 .is-speaking .mouth-idle { display: none; }
-@keyframes talk { from { transform: scaleY(.35); } to { transform: scaleY(1.25); } }
+/* Muh ka khulna robot.js asal audio level se style.transform
+   me likhta hai - CSS animation nahi, taaki muh tabhi hile
+   jab awaaz sach me baj rahi ho. */
 
 .antenna-ball { fill: #8fa6b0; transition: fill .3s; }
 .is-listening .antenna-ball { fill: var(--line-green); }
 .is-speaking  .antenna-ball { fill: var(--accent); }
 .is-thinking  .antenna-ball { fill: var(--amber); }
-.is-caring    .antenna-ball { fill: var(--care); }
 .is-error     .antenna-ball { fill: #e5484d; }
 .ring { opacity: 0; transform-box: fill-box; transform-origin: center; }
 .is-listening .ring { animation: ringpulse 1.3s ease-out infinite; }
@@ -77,7 +79,6 @@ html, body {
 .ear-light { fill: #33505c; transition: fill .3s; }
 .is-listening .ear-light { fill: var(--line-green); }
 .is-speaking  .ear-light { fill: var(--accent); }
-.is-caring    .ear-light { fill: var(--care); }
 .is-error     .ear-light { fill: #e5484d; }
 .core { animation: corepulse 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
 @keyframes corepulse { 0%, 100% { transform: scale(1); opacity: .85; } 50% { transform: scale(1.18); opacity: 1; } }
@@ -96,18 +97,7 @@ html, body {
 .think-dots circle:nth-child(3) { animation-delay: .4s; }
 @keyframes dotfade { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
 
-/* ---------- Caring (pyaar) andaaz ---------- */
 .cheek { transition: opacity .3s; }
-.is-caring .cheek { opacity: 1; }
-.heart-eyes { display: none; }
-.is-caring .heart-eyes { display: block; }
-.is-caring .pupils { display: none; }
-.hearts { display: none; }
-.is-caring .hearts { display: block; }
-.hearts path { fill: var(--care); transform-box: fill-box; transform-origin: center; animation: heartfloat 2.4s ease-in-out infinite; }
-.hearts g:nth-child(2) path { animation-delay: .7s; fill: #f79eb4; }
-.hearts g:nth-child(3) path { animation-delay: 1.3s; }
-@keyframes heartfloat { 0% { transform: translateY(4px) scale(.55); opacity: 0; } 25% { opacity: 1; } 100% { transform: translateY(-24px) scale(1.05); opacity: 0; } }
 
 .shadow-ellipse { animation: shadowpulse 3.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
 @keyframes shadowpulse { 0%, 100% { transform: scaleX(1); opacity: .5; } 50% { transform: scaleX(.86); opacity: .35; } }
@@ -125,16 +115,98 @@ html, body {
 .is-listening .status-line { animation-duration: 1s; }
 .is-speaking  .status-line { animation-duration: .55s; background: var(--accent); box-shadow: 0 0 12px 2px rgba(43, 179, 191, .7); }
 .is-thinking  .status-line { background: var(--amber); box-shadow: 0 0 12px 2px rgba(232, 161, 58, .6); animation-duration: 1.4s; }
-.is-caring    .status-line { background: var(--care); box-shadow: 0 0 12px 2px rgba(242, 112, 138, .65); animation-duration: 1.6s; }
 .is-error     .status-line { background: #e5484d; box-shadow: 0 0 12px 2px rgba(229, 72, 77, .6); }
+.is-hudopen   .status-line { background: #5b7180; box-shadow: none; animation: none; }
 @keyframes pulse-line { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 
 /* Error par halka laal rang chehre par bhi */
 .is-error .face-screen { stroke: #e5484d; }
 
+/* ---------- Controls (v3.37: robot hi client hai) ---------- */
+.status-text {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #9fc3cf;
+  text-align: center;
+  max-width: 230px;
+  min-height: 15px;
+}
+.controls { margin-top: 6px; }
+.mic-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: #12303c;
+  font-size: 19px;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(43, 179, 191, .45);
+}
+.mic-btn:active { transform: scale(.94); }
+.gear-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid #33505c;
+  background: rgba(18, 48, 60, .85);
+  font-size: 14px;
+  cursor: pointer;
+}
+.robot { cursor: pointer; }
+
+/* Badi window khul jaye to robot shaant aur dhundhla */
+.is-hudopen .robot { filter: grayscale(.65); opacity: .72; }
+.is-hudopen .bot-bob { animation: none; }
+.hud-note {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  background: rgba(10, 26, 34, .94);
+  border: 1px solid #33505c;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #cfe6ee;
+}
+.hud-note p { margin: 2px 0; }
+
+/* Confirmation card - gated kaam sirf yahan ke tap se */
+.confirm-box {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  background: rgba(10, 26, 34, .97);
+  border: 1px solid var(--amber);
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 12.5px;
+  color: #ffe9c4;
+  text-align: center;
+  z-index: 5;
+}
+.confirm-box p { margin: 0 0 8px; }
+.confirm-btns { display: flex; gap: 8px; justify-content: center; }
+.confirm-btns button {
+  padding: 6px 18px;
+  border-radius: 8px;
+  border: 1px solid #33505c;
+  background: #12303c;
+  color: #eafcff;
+  font-size: 13px;
+  cursor: pointer;
+}
+#confirmYes { border-color: var(--line-green); }
+
 @media (prefers-reduced-motion: reduce) {
   .bot-bob, .eyes, .status-line, .core, .shadow-ellipse { animation: none !important; }
-  .is-speaking .bot-bob, .is-thinking .pupils, .is-speaking .mouth-talk,
+  .is-speaking .bot-bob, .is-thinking .pupils,
   .is-speaking .arm-r, .is-listening .arm-l, .is-listening .ring,
-  .think-dots circle, .hearts path { animation: none !important; }
+  .think-dots circle { animation: none !important; }
 }
