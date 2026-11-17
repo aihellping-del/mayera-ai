@@ -1666,3 +1666,20 @@ test_chrome_only 5/5 (is VM par fastapi nahi, halke stub
 ke saath - pichhle releases ki tarah), test_updater_
 checksums 4/4.
 FAKE-INSTALL PROOF: neeche addendum me (stub + live).
+FAKE-INSTALL PROOF (v3.37.0 addendum): pehle ek nakli
+v3.36.1 install (GitHub ke a45fac8e commit se asal purani
+files + usi ka purana updater; nakli mayera_memory.db +
+key.dat sentinel) ko local naye tree se stub-fetch par
+chalaya gaya - "Update ho gaya! JARVIS ab v3.37.0 hai.",
+badli hui saari files (ui.py, main.py, robot teeno files,
+TEST_REPORT, checksums) byte-identical, dono sentinel
+byte-identical. Phir push ke baad ek taaza nakli v3.36.1
+install LIVE GitHub channel se asal updater se update
+hua - wahi sandesh, version.txt 3.37.0, badli hui files
+byte-identical, dono sentinel byte-identical.
+Owner ka ekmatra bacha step: START_JARVIS.bat se ek
+restart - is baar sirf robot window khulegi; robot ko
+chhu kar baat shuru hogi, JARVIS ki asal awaaz robot se
+aayegi. Mic + playback robot --app window ke andar,
+robot-only launch, aur HUD khulne par socket-badlav ka
+asal vyavhaar usi restart par pakka hoga.
