@@ -1503,3 +1503,14 @@ baseline me bhi nahi chalta (google module absent, is
 badlav se pehle bhi waisa hi tha; ui.py/main.py ko chhuta
 hi nahi).
 FAKE-INSTALL PROOF: neeche addendum me (live channel se).
+FAKE-INSTALL PROOF (v3.36.0 addendum): pehle ek nakli
+v3.35.2 install (uske APNE purane updater ke saath) ko local
+tree se stub-fetch par chalaya gaya - update safal, robot
+files byte-identical pahunche, mayera_memory.db + key.dat
+sentinel byte-identical rahe. Phir push ke baad wahi nakli
+install LIVE GitHub channel se asal updater se update hua:
+"Update ho gaya! JARVIS ab v3.36.0 hai." Dobara jaanch:
+version.txt 3.36.0, teeno robot files + ui.py + main.py
+source ke byte-identical, dono sentinel (memory db, key)
+byte-identical. Owner ka ekmatra bacha step: START_JARVIS.bat
+se ek restart - robot kone wali window me khud aa jayega.
