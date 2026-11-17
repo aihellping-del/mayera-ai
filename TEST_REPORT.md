@@ -1574,3 +1574,16 @@ main.py OK. Regression: test_chrome_only 5/5 (is VM par
 fastapi nahi, halke stub ke saath - v3.36.0 ki tarah),
 test_updater_checksums 4/4.
 FAKE-INSTALL PROOF: neeche addendum me (stub + live).
+FAKE-INSTALL PROOF (v3.36.1 addendum): pehle ek nakli
+v3.36.0 install (uske APNE purane updater ke saath) ko
+local naye tree se stub-fetch par chalaya gaya - "Update
+ho gaya! JARVIS ab v3.36.1 hai.", badli hui saari files
+(ui.py, main.py, robot teeno files, TEST_REPORT,
+checksums) byte-identical, mayera_memory.db + key.dat
+sentinel byte-identical. Phir push ke baad ek taaza nakli
+v3.36.0 install LIVE GitHub channel se asal updater se
+update hua - wahi sandesh, version.txt 3.36.1, badli hui
+files byte-identical, dono sentinel byte-identical.
+Owner ka ekmatra bacha step: START_JARVIS.bat se ek
+restart - badi window khud minimize ho jayegi, sirf
+robot kone me dikhega aur idle par pyaar se bolega.
