@@ -898,6 +898,15 @@ def main():
         # (MAYERA_NO_ROBOT=1 se band; fail-soft, JARVIS nahi rukta)
         if os.environ.get("MAYERA_NO_ROBOT") != "1":
             ui_mod.open_robot_later(url)
+        # v3.36.1: badi HUD window call active hote hi ek baar
+        # minimize (owner: "sirf robot dikhe"). HUD BAND nahi
+        # hoti - wahi voice client hai. MAYERA_NO_AUTO_MINIMIZE=1
+        # par watcher band; fail-soft, JARVIS kabhi nahi rukta.
+        try:
+            ui_mod.start_hud_minimize_watcher(
+                lambda: _last_ui_status["state"])
+        except Exception:  # noqa: BLE001
+            pass
     print()
     print("  ============================================")
     print("   JARVIS AI - Voice Companion")

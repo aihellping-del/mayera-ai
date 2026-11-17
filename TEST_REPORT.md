@@ -1514,3 +1514,63 @@ version.txt 3.36.0, teeno robot files + ui.py + main.py
 source ke byte-identical, dono sentinel (memory db, key)
 byte-identical. Owner ka ekmatra bacha step: START_JARVIS.bat
 se ek restart - robot kone wali window me khud aa jayega.
+
+--- v3.36.1 (2026-11-17): BADI WINDOW HIDE + ROBOT KI AAWAZ ---
+Owner ne v3.36.0 restart ke baad badi HUD window ki photo
+bhej kar kaha: "ye Q open ho rha esko hata do" - tap par
+saaf chuna: "Badi window hata do - sirf robot dikhe". Aur
+saath hi dusri order: "Robot baat ni rha hai, usko baat
+karne bole, likhne ni".
+(1) HUD AUTO-MINIMIZE (ui.py + main.py): badi window BAND
+nahi hoti - wo voice client hai (mic/WebSocket/audio/START
+usi page me hai); band karne se JARVIS ki awaaz hi mar
+jati aur robot ko status milna band ho jata. Isliye window
+khulti hai aur turant minimize ho jati hai: open_ui_later
+app mode milte hi background thread ctypes se HUD window
+(title "JARVIS AI — Voice Companion", substring "Voice
+Companion" se - robot ki window se kabhi takraav nahi)
+dhoondh kar ShowWindow SW_MINIMIZE karta hai (~10s retry,
+fail-soft). Owner taskbar se window wapas laa kar START
+dabata hai; HudMinimizeWatcher _last_ui_status aaine ko
+poll karta hai aur idle/connecting se active (connected/
+listening/speaking/thinking/muted) me jaate hi us call me
+EK baar phir minimize kar deta hai - call ke beech restore
+kare to dobara nahi ladta, call khatm (idle/error) par
+ghadi reset. Idle rehte hue (settings) kabhi minimize
+nahi. MAYERA_NO_AUTO_MINIMIZE=1 par purana vyavhaar;
+MAYERA_NO_APP_UI=1 (tab mode) me minimize bilkul band aur
+watcher sirf asal --app mode me hi haath lagata hai
+(open_ui_later ke note kiye mode se pakka karke). Har
+ctypes nakami sirf log - startup kabhi nahi rukta.
+(2) ROBOT KI AAWAZ (dashboard/robot.js/html/css): caring
+lines ab LIKHI nahi jati, BOLI jati hain - Chrome ki apni
+Hindi awaaz window.speechSynthesis se (koi naya package
+nahi, koi backend TTS nahi, Gemini Live aur
+SYSTEM_INSTRUCTION bilkul vaise ke vaise). Bolne ke liye
+paancho approved lines Devanagari me rakhi gayi hain;
+hi-IN voice mile to wahi, warna lang "hi-IN" ke saath
+default awaaz. Har caring cycle me EK line, sirf jab
+status idle/connected ho (koi call active nahi). Koi bhi
+asal haalat (bolna/sunna/sochna/error) aate hi
+speechSynthesis.cancel() - window band hone par bhi
+(beforeunload/pagehide). Likha hua caring bubble HTML/
+JS/CSS teeno se poora hata diya gaya; dil wali aankhein,
+gulabi gaal, udte dil waise ke vaise. Awaaz default ON;
+robot par click = robot ki awaaz band/chalu, pasand
+localStorage (jarvisRobotVoice) me yaad rehti hai. Iske
+alawa koi naya UI nahi.
+TESTS: test_robot_pet.py 62/62 passed (purane 33 + naye
+29: title takraav nahi, auto_minimize_enabled ke teeno
+opt-out, nakli window par minimize/launch-retry, watcher
+ka call-transition ek-baar niyam + restore-se-na-ladna +
+agli call par reset + enabled=False par band + getter
+fail par crash nahi, watcher opt-out par shuru hi nahi;
+speechSynthesis + SpeechSynthesisUtterance + hi-IN maujood,
+paancho Devanagari lines maujood, bubble HTML/JS/CSS se
+gayab, cancel kam se kam 2 jagah + beforeunload, click
+toggle + localStorage + default ON, caring visuals
+barkarar). node --check robot.js OK, py_compile ui.py +
+main.py OK. Regression: test_chrome_only 5/5 (is VM par
+fastapi nahi, halke stub ke saath - v3.36.0 ki tarah),
+test_updater_checksums 4/4.
+FAKE-INSTALL PROOF: neeche addendum me (stub + live).

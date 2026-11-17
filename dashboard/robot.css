@@ -38,42 +38,6 @@ html, body {
   background: radial-gradient(120% 90% at 50% 0%, #12303c 0%, #0a141b 70%);
 }
 
-/* ---------- Speech bubble (sirf caring mode me dikhta hai) ---------- */
-.bubble {
-  position: relative;
-  width: 218px;
-  max-width: 92%;
-  background: #fffdf6;
-  color: #22303a;
-  border-radius: 14px;
-  padding: 8px 12px;
-  font-size: .92rem;
-  font-weight: 600;
-  line-height: 1.35;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, .35);
-  text-align: left;
-  margin-bottom: 12px;
-  opacity: 0;
-  transform: translateY(6px) scale(.96);
-  pointer-events: none;
-  transition: opacity .35s ease, transform .35s ease;
-}
-.bubble::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -7px;
-  width: 14px;
-  height: 14px;
-  background: #fffdf6;
-  transform: translateX(-50%) rotate(45deg);
-  border-radius: 2px;
-}
-.bubble.show {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
 /* ---------- Robot ---------- */
 .robot {
   display: block;
