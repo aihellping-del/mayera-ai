@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS Robot Dost</title>
+<link rel="stylesheet" href="/static/robot.css">
+</head>
+<body>
+  <div class="stage is-idle" id="stage">
+    <div class="bubble" id="bubble"><span id="bubbleText"></span></div>
+
+    <svg class="robot" id="robot" viewBox="0 0 200 218" role="img" aria-label="JARVIS ka chhota pyara robot">
+      <!-- zameen ki parchaai -->
+      <ellipse class="shadow-ellipse" cx="100" cy="206" rx="52" ry="9" fill="#000" opacity=".45"/>
+      <g class="bot-bob">
+        <!-- antenna -->
+        <line x1="100" y1="38" x2="100" y2="16" stroke="#9fb4bd" stroke-width="5" stroke-linecap="round"/>
+        <circle class="ring" cx="100" cy="13" r="12" fill="none" stroke="#35d07f" stroke-width="2.5"/>
+        <circle class="ring r2" cx="100" cy="13" r="12" fill="none" stroke="#35d07f" stroke-width="2.5"/>
+        <circle class="antenna-ball" cx="100" cy="13" r="7.5"/>
+        <!-- kaan / side pods -->
+        <rect x="18" y="82" width="16" height="34" rx="8" fill="#c8d6dc"/>
+        <rect x="166" y="82" width="16" height="34" rx="8" fill="#c8d6dc"/>
+        <circle class="ear-light" cx="26" cy="99" r="4.5"/>
+        <circle class="ear-light" cx="174" cy="99" r="4.5"/>
+        <!-- sar -->
+        <rect x="32" y="36" width="136" height="112" rx="44" fill="#eef4f6"/>
+        <rect class="face-frame" x="32" y="36" width="136" height="112" rx="44" fill="none" stroke="#b9ccd3" stroke-width="2"/>
+        <!-- chehre wali screen -->
+        <rect class="face-screen" x="46" y="50" width="108" height="84" rx="34" fill="#10222c"/>
+        <!-- gaal -->
+        <ellipse class="cheek" cx="66" cy="112" rx="9" ry="5.5" fill="#f2a0a8" opacity=".75"/>
+        <ellipse class="cheek" cx="134" cy="112" rx="9" ry="5.5" fill="#f2a0a8" opacity=".75"/>
+        <!-- aankhein -->
+        <g class="eyes">
+          <g class="pupils">
+            <rect x="66" y="76" width="15" height="24" rx="7.5" fill="#46d8e8"/>
+            <rect x="119" y="76" width="15" height="24" rx="7.5" fill="#46d8e8"/>
+            <circle cx="70.5" cy="82" r="3.4" fill="#eafcff"/>
+            <circle cx="123.5" cy="82" r="3.4" fill="#eafcff"/>
+          </g>
+          <g class="heart-eyes" fill="#f2708a">
+            <path transform="translate(61.5 76)" d="M12 21C12 21 4 15.5 4 9.9 4 7 6.2 5 8.6 5c1.4 0 2.7.8 3.4 2 .7-1.2 2-2 3.4-2C17.8 5 20 7 20 9.9 20 15.5 12 21 12 21z"/>
+            <path transform="translate(114.5 76)" d="M12 21C12 21 4 15.5 4 9.9 4 7 6.2 5 8.6 5c1.4 0 2.7.8 3.4 2 .7-1.2 2-2 3.4-2C17.8 5 20 7 20 9.9 20 15.5 12 21 12 21z"/>
+          </g>
+        </g>
+        <!-- muh: chup -->
+        <path class="mouth-idle" d="M90 116 Q100 123 110 116" stroke="#46d8e8" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+        <!-- muh: bolte hue -->
+        <ellipse class="mouth-talk" cx="100" cy="118" rx="7" ry="7.5" fill="#46d8e8"/>
+        <!-- soch ke dots -->
+        <g class="think-dots" fill="#e8a13a">
+          <circle cx="152" cy="34" r="3.4"/>
+          <circle cx="163" cy="24" r="4.4"/>
+          <circle cx="176" cy="12" r="5.6"/>
+        </g>
+        <!-- pyaar wale udte dil -->
+        <g class="hearts">
+          <g transform="translate(156 30) scale(.9)"><path d="M12 21C12 21 4 15.5 4 9.9 4 7 6.2 5 8.6 5c1.4 0 2.7.8 3.4 2 .7-1.2 2-2 3.4-2C17.8 5 20 7 20 9.9 20 15.5 12 21 12 21z"/></g>
+          <g transform="translate(174 10) scale(.6)"><path d="M12 21C12 21 4 15.5 4 9.9 4 7 6.2 5 8.6 5c1.4 0 2.7.8 3.4 2 .7-1.2 2-2 3.4-2C17.8 5 20 7 20 9.9 20 15.5 12 21 12 21z"/></g>
+          <g transform="translate(138 6) scale(.55)"><path d="M12 21C12 21 4 15.5 4 9.9 4 7 6.2 5 8.6 5c1.4 0 2.7.8 3.4 2 .7-1.2 2-2 3.4-2C17.8 5 20 7 20 9.9 20 15.5 12 21 12 21z"/></g>
+        </g>
+        <!-- gardan + shareer -->
+        <rect x="90" y="146" width="20" height="8" rx="3" fill="#9fb4bd"/>
+        <path d="M70 154 h60 l7 34 a8 8 0 0 1 -8 10 H71 a8 8 0 0 1 -8 -10 z" fill="#dfe9ed"/>
+        <path d="M70 154 h60 l2.5 12 H67.5 z" fill="#2bb3bf" opacity=".28"/>
+        <circle class="core" cx="100" cy="174" r="8" fill="#2bb3bf"/>
+        <circle cx="100" cy="174" r="3.4" fill="#eafcff"/>
+        <!-- baayein haath -->
+        <g class="arm-l">
+          <rect x="48" y="156" width="13" height="30" rx="6.5" fill="#c8d6dc"/>
+          <circle cx="54.5" cy="188" r="6.5" fill="#eef4f6"/>
+        </g>
+        <!-- daayein haath -->
+        <g class="arm-r">
+          <rect x="139" y="156" width="13" height="30" rx="6.5" fill="#c8d6dc"/>
+          <circle cx="145.5" cy="188" r="6.5" fill="#eef4f6"/>
+        </g>
+      </g>
+    </svg>
+
+    <div class="status-line" aria-hidden="true"></div>
+  </div>
+  <script src="/static/robot.js"></script>
+</body>
+</html>

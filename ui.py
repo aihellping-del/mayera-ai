@@ -114,3 +114,148 @@ def open_ui_later(url, delay=1.2):
             print("  UI apni alag dashboard window me khula hai "
                   "(browser tab nahi bana).", flush=True)
     threading.Timer(delay, _open).start()
+
+
+# ------------------------------------------------------------------
+# Robot Dost (v3.36): kone wali chhoti robot window.
+#
+# Owner ki pasand ka chhota robot (dashboard/robot.html) ek alag
+# chhoti Chrome --app window me screen ke neeche-dayein kone me
+# rehta hai aur JARVIS ki haalat (bol/sun/soch) par react karta
+# hai. Ye sirf ek chehra hai - mic/audio badi HUD ke paas hi
+# rehte hain. MAYERA_NO_ROBOT=1 se band. Har nakami sirf log
+# hoti hai; robot ki wajah se JARVIS kabhi nahi rukta.
+# ------------------------------------------------------------------
+
+ROBOT_W = 280
+ROBOT_H = 330
+ROBOT_MARGIN = 12
+ROBOT_TASKBAR = 48          # Windows taskbar ki jagah chhod kar
+ROBOT_TITLE = "JARVIS Robot Dost"
+
+
+def robot_window_pos(screen_w, screen_h, win_w=ROBOT_W, win_h=ROBOT_H):
+    """Bottom-right position (x, y), screen ke andar hi clamped."""
+    x = max(0, screen_w - win_w - ROBOT_MARGIN)
+    y = max(0, screen_h - win_h - ROBOT_MARGIN - ROBOT_TASKBAR)
+    return x, y
+
+
+def _screen_size():
+    """Primary screen ka size (w, h) ya None (fail-soft)."""
+    if not sys.platform.startswith("win"):
+        return None
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        return (int(user32.GetSystemMetrics(0)),
+                int(user32.GetSystemMetrics(1)))
+    except Exception:  # noqa: BLE001 - size na mile to position skip
+        return None
+
+
+def _find_window_by_title(title_part):
+    """Title me `title_part` wali pehli dikhai dene wali window
+    ka handle ya None. Sirf Windows; har galti par None."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, ROBOT_TITLE)
+        if hwnd:
+            return hwnd
+        found = []
+
+        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND,
+                            wintypes.LPARAM)
+        def _cb(h, _lp):
+            try:
+                if not user32.IsWindowVisible(h):
+                    return True
+                buf = ctypes.create_unicode_buffer(256)
+                user32.GetWindowTextW(h, buf, 256)
+                if title_part in buf.value:
+                    found.append(h)
+                    return False
+            except Exception:  # noqa: BLE001
+                pass
+            return True
+
+        user32.EnumWindows(_cb, 0)
+        return found[0] if found else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _pin_robot_topmost():
+    """Robot window ko always-on-top karne ki koshish (best
+    effort, background thread). Window milne tak ~10s retry;
+    na mile ya API fail ho to chup-chaap chhod do - robot
+    bina topmost ke bhi chalega."""
+    if not sys.platform.startswith("win"):
+        return
+    try:
+        import ctypes
+        import time as _time
+        user32 = ctypes.windll.user32
+        HWND_TOPMOST = -1
+        SWP_NOSIZE = 0x0001
+        SWP_NOMOVE = 0x0002
+        SWP_NOACTIVATE = 0x0010
+        for _ in range(14):
+            hwnd = _find_window_by_title("Robot Dost")
+            if hwnd:
+                ok = user32.SetWindowPos(
+                    hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+                if ok:
+                    print("  Robot Dost: window sabse upar (topmost) "
+                          "set ho gayi.", flush=True)
+                return
+            _time.sleep(0.7)
+    except Exception:  # noqa: BLE001 - topmost na ho to bhi theek
+        pass
+
+
+def open_robot(url, finder=None, popen=None, pin=None):
+    """Robot window kholo; returns 'off' | 'skip' | 'app:chrome'.
+    Tab kabhi nahi khulta - robot sirf --app window me rehta hai,
+    Chrome na mile to robot chup-chaap skip ho jata hai."""
+    if os.environ.get("MAYERA_NO_ROBOT") == "1":
+        return "off"
+    if os.environ.get("MAYERA_NO_APP_UI") == "1":
+        return "skip"
+    name, exe = (finder or _app_browser)()
+    if not exe:
+        return "skip"
+    args = [exe, f"--app={url}",
+            f"--window-size={ROBOT_W},{ROBOT_H}"]
+    size = _screen_size()
+    if size:
+        x, y = robot_window_pos(size[0], size[1])
+        args.append(f"--window-position={x},{y}")
+    try:
+        (popen or subprocess.Popen)(
+            args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:  # noqa: BLE001 - robot fail = JARVIS fail nahi
+        return "skip"
+    if pin is None:
+        threading.Thread(target=_pin_robot_topmost,
+                         daemon=True).start()
+    else:
+        pin()
+    return f"app:{name}"
+
+
+def open_robot_later(base_url, delay=2.5):
+    """Startup ke thodi der baad robot window (fail-soft)."""
+    def _open():
+        try:
+            mode = open_robot(base_url.rstrip("/") +
+                              "/static/robot.html")
+            if mode.startswith("app:"):
+                print("  Robot Dost kone wali window me aa gaya "
+                      "hai.", flush=True)
+        except Exception:  # noqa: BLE001
+            pass
+    threading.Timer(delay, _open).start()

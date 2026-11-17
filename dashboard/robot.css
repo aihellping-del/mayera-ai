@@ -1,0 +1,176 @@
+/* JARVIS Robot Dost (v3.36) - kone wali chhoti robot window.
+   Design owner ke approved namune (jarvis-robot-namuna) se liya
+   gaya hai: gol sar, chamakta antenna, badi aankhein, chhota muh,
+   caring mode me dil wali aankhein + gulabi gaal + udte dil.
+   Haalat body ki class se badalti hai (robot.js lagata hai):
+   is-idle / is-listening / is-speaking / is-thinking /
+   is-caring / is-error. */
+
+:root {
+  --accent: #2bb3bf;
+  --amber: #e8a13a;
+  --care: #f2708a;
+  --line-green: #35d07f;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0a141b;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 10px 12px 12px;
+  background: radial-gradient(120% 90% at 50% 0%, #12303c 0%, #0a141b 70%);
+}
+
+/* ---------- Speech bubble (sirf caring mode me dikhta hai) ---------- */
+.bubble {
+  position: relative;
+  width: 218px;
+  max-width: 92%;
+  background: #fffdf6;
+  color: #22303a;
+  border-radius: 14px;
+  padding: 8px 12px;
+  font-size: .92rem;
+  font-weight: 600;
+  line-height: 1.35;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .35);
+  text-align: left;
+  margin-bottom: 12px;
+  opacity: 0;
+  transform: translateY(6px) scale(.96);
+  pointer-events: none;
+  transition: opacity .35s ease, transform .35s ease;
+}
+.bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  background: #fffdf6;
+  transform: translateX(-50%) rotate(45deg);
+  border-radius: 2px;
+}
+.bubble.show {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* ---------- Robot ---------- */
+.robot {
+  display: block;
+  width: 168px;
+  height: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bot-bob { animation: bob 3.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+.is-speaking .bot-bob { animation: bounce .42s ease-in-out infinite; }
+@keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+
+.eyes { animation: blink 4.4s infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.08); } }
+.pupils { transition: transform .35s ease; transform-box: fill-box; transform-origin: center; }
+.is-listening .pupils { transform: translateY(-2.5px); }
+.is-thinking .pupils { animation: wander 1.6s ease-in-out infinite; }
+@keyframes wander { 0%, 100% { transform: translateX(-5px); } 50% { transform: translateX(5px); } }
+
+.mouth-talk { display: none; transform-box: fill-box; transform-origin: center; }
+.is-speaking .mouth-talk { display: block; animation: talk .28s ease-in-out infinite alternate; }
+.is-speaking .mouth-idle { display: none; }
+@keyframes talk { from { transform: scaleY(.35); } to { transform: scaleY(1.25); } }
+
+.antenna-ball { fill: #8fa6b0; transition: fill .3s; }
+.is-listening .antenna-ball { fill: var(--line-green); }
+.is-speaking  .antenna-ball { fill: var(--accent); }
+.is-thinking  .antenna-ball { fill: var(--amber); }
+.is-caring    .antenna-ball { fill: var(--care); }
+.is-error     .antenna-ball { fill: #e5484d; }
+.ring { opacity: 0; transform-box: fill-box; transform-origin: center; }
+.is-listening .ring { animation: ringpulse 1.3s ease-out infinite; }
+.is-listening .ring.r2 { animation-delay: .45s; }
+@keyframes ringpulse { 0% { opacity: .8; transform: scale(.4); } 100% { opacity: 0; transform: scale(1.6); } }
+
+.ear-light { fill: #33505c; transition: fill .3s; }
+.is-listening .ear-light { fill: var(--line-green); }
+.is-speaking  .ear-light { fill: var(--accent); }
+.is-caring    .ear-light { fill: var(--care); }
+.is-error     .ear-light { fill: #e5484d; }
+.core { animation: corepulse 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes corepulse { 0%, 100% { transform: scale(1); opacity: .85; } 50% { transform: scale(1.18); opacity: 1; } }
+
+.arm-r { transform-box: fill-box; transform-origin: top center; }
+.is-speaking .arm-r { animation: wave .5s ease-in-out infinite alternate; }
+@keyframes wave { from { transform: rotate(0deg); } to { transform: rotate(-26deg); } }
+.arm-l { transform-box: fill-box; transform-origin: top center; }
+.is-listening .arm-l { animation: wave2 .6s ease-in-out infinite alternate; }
+@keyframes wave2 { from { transform: rotate(0deg); } to { transform: rotate(18deg); } }
+
+.think-dots { display: none; }
+.is-thinking .think-dots { display: block; }
+.think-dots circle { animation: dotfade 1.2s ease-in-out infinite; }
+.think-dots circle:nth-child(2) { animation-delay: .2s; }
+.think-dots circle:nth-child(3) { animation-delay: .4s; }
+@keyframes dotfade { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+
+/* ---------- Caring (pyaar) andaaz ---------- */
+.cheek { transition: opacity .3s; }
+.is-caring .cheek { opacity: 1; }
+.heart-eyes { display: none; }
+.is-caring .heart-eyes { display: block; }
+.is-caring .pupils { display: none; }
+.hearts { display: none; }
+.is-caring .hearts { display: block; }
+.hearts path { fill: var(--care); transform-box: fill-box; transform-origin: center; animation: heartfloat 2.4s ease-in-out infinite; }
+.hearts g:nth-child(2) path { animation-delay: .7s; fill: #f79eb4; }
+.hearts g:nth-child(3) path { animation-delay: 1.3s; }
+@keyframes heartfloat { 0% { transform: translateY(4px) scale(.55); opacity: 0; } 25% { opacity: 1; } 100% { transform: translateY(-24px) scale(1.05); opacity: 0; } }
+
+.shadow-ellipse { animation: shadowpulse 3.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes shadowpulse { 0%, 100% { transform: scaleX(1); opacity: .5; } 50% { transform: scaleX(.86); opacity: .35; } }
+
+/* ---------- Status line (Rainbow Flow wali hari line) ---------- */
+.status-line {
+  width: 168px;
+  height: 5px;
+  border-radius: 99px;
+  margin-top: 8px;
+  background: var(--line-green);
+  box-shadow: 0 0 12px 2px rgba(53, 208, 127, .65);
+  animation: pulse-line 2.2s ease-in-out infinite;
+}
+.is-listening .status-line { animation-duration: 1s; }
+.is-speaking  .status-line { animation-duration: .55s; background: var(--accent); box-shadow: 0 0 12px 2px rgba(43, 179, 191, .7); }
+.is-thinking  .status-line { background: var(--amber); box-shadow: 0 0 12px 2px rgba(232, 161, 58, .6); animation-duration: 1.4s; }
+.is-caring    .status-line { background: var(--care); box-shadow: 0 0 12px 2px rgba(242, 112, 138, .65); animation-duration: 1.6s; }
+.is-error     .status-line { background: #e5484d; box-shadow: 0 0 12px 2px rgba(229, 72, 77, .6); }
+@keyframes pulse-line { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+/* Error par halka laal rang chehre par bhi */
+.is-error .face-screen { stroke: #e5484d; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bot-bob, .eyes, .status-line, .core, .shadow-ellipse { animation: none !important; }
+  .is-speaking .bot-bob, .is-thinking .pupils, .is-speaking .mouth-talk,
+  .is-speaking .arm-r, .is-listening .arm-l, .is-listening .ring,
+  .think-dots circle, .hearts path { animation: none !important; }
+}

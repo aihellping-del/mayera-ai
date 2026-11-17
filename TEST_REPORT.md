@@ -1445,3 +1445,61 @@ Release rule reinforced: checksums.txt NEVER lists itself,
 and the fake-install proof (old install, OLD updater code,
 new files deleted) is run before calling any version done -
 that exact test caught cause (2) after cause (1) was fixed.
+
+--- v3.36.0 "Robot Dost" (2026-11-17): KONE WALA ROBOT ---
+Owner ki demand, pehle namuna (Space jarvis-robot-namuna,
+caring version) approve hua, phir unke shabdon par: "Asli me
+Jod do". Ek chhota pyara robot ab JARVIS ke saath screen ke
+neeche-dayein kone me rehta hai aur wahi se react karta hai.
+NAYE FILES: dashboard/robot.html + robot.js + robot.css -
+owner ke approved namune wala hi chehra (gol sar, chamakta
+antenna, badi aankhein, chhota muh; caring me dil wali
+aankhein, gulabi gaal, udte dil). Koi chat box nahi, koi
+transcript nahi - voice-only niyam yahan bhi lagu.
+HAALAT KA RAASTA (suraksha wala faisla): /ws par EK hi client
+reh sakta hai - dusra judte hi pehla kat jata hai (by design,
+audio ki ladai rokne ke liye). Isliye robot /ws NAHI kholta.
+send_ui_status (saari status ka ekmatra raasta) ab aakhri
+status ek aaine me bhi rakhta hai aur naya read-only
+GET /robot-status use deta hai; robot.js use 400ms par poll
+karke wahi states dikhata hai jo HUD ko WebSocket par milti
+hain: speaking = muh hilta + halka bounce, listening =
+antenna hari chamak + dhyaan wali aankhein, thinking =
+aankhein idhar-udhar + peeli line, idle/connected = jhapakti
+aankhein + halka bob, error = laal rang. Koi naya TTS/audio
+nahi - awaaz sirf Gemini Live ki.
+CARING (sirf visual): lagatar ~45s idle/connected rahe to
+robot dil wali aankhon ke saath chhota bubble dikha kar
+owner ki approved lines ghumata hai - "Tum kya kar rhe
+ho?", "Khana khaya tumne?", "Paani piya? Apna khayal
+rakha karo", "Thoda aaram bhi kar lo", "Thak to nahi
+gaye?" Koi bhi asal haalat aate hi bubble turant gayab.
+SYSTEM_INSTRUCTION/personality me koi badlav nahi.
+LAUNCHER (ui.py): open_robot() open_ui() ke pattern par -
+dusri chhoti Chrome --app window (280x330) /static/robot.html
+ke liye, --window-position screen size (ctypes
+GetSystemMetrics) se neeche-dayein kone par (chhoti screen
+par clamp), phir background thread ctypes se window ko
+title "JARVIS Robot Dost" se dhoondh kar SetWindowPos
+HWND_TOPMOST ki koshish karta hai. MAYERA_NO_ROBOT=1 se
+band (main.py aur ui.py dono jagah), MAYERA_NO_APP_UI=1 par
+bhi skip, Chrome na mile to skip - tab kabhi nahi khulta.
+Har nakami sirf log hoti hai; robot ki wajah se JARVIS ki
+shuruaat kabhi nahi rukti. Badi HUD bilkul vaaisi ki vaaisi.
+TESTS: test_robot_pet.py NAYA 33/33 passed (position math
+1920x1080 -> (1628,690), 1366x768 -> (1074,378), 320x240
+clamp (28,0), 200x200 clamp (0,0); MAYERA_NO_ROBOT opt-out
+par popen bilkul nahi; Chrome par --app URL + --window-size
+sahi; Chrome na mile to skip; MAYERA_NO_APP_UI par skip;
+teeno robot files + manifest entries; /robot-status
+endpoint + send_ui_status aaina; paancho caring lines;
+robot.js me koi WebSocket construction nahi; page me koi
+input/textarea nahi). node --check robot.js + app.js OK.
+py_compile ui.py + main.py OK. Regression: test_chrome_only
+5/5 (is VM par fastapi/google module nahi hain, isliye halke
+stub ke saath chalaya gaya - ui.py ka vyavhaar verified),
+test_updater_checksums 4/4. test_hud_window is VM par
+baseline me bhi nahi chalta (google module absent, is
+badlav se pehle bhi waisa hi tha; ui.py/main.py ko chhuta
+hi nahi).
+FAKE-INSTALL PROOF: neeche addendum me (live channel se).

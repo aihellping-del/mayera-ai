@@ -39,6 +39,9 @@ dashboard/app.js
 dashboard/flow.js
 dashboard/index.html
 dashboard/particles.js
+dashboard/robot.css
+dashboard/robot.html
+dashboard/robot.js
 dashboard/styles-aurora.css
 dashboard/styles-classic.css
 dashboard/styles-neon.css

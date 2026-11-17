@@ -168,7 +168,8 @@ def _record_latency(seconds: float, end_wait=None, token_wait=None):
 # Consecutive duplicate statuses are not re-sent: the AI-audio path
 # used to send one JSON status per audio chunk (many per second),
 # which wasted socket and browser work on every single reply.
-_last_ui_status = {"key": None}
+_last_ui_status = {"key": None, "state": "idle", "message": "",
+                   "at": 0.0}
 
 
 async def send_ui_status(state: str, message: str = ""):
@@ -176,6 +177,11 @@ async def send_ui_status(state: str, message: str = ""):
     if _last_ui_status["key"] == key:
         return
     _last_ui_status["key"] = key
+    # v3.36: robot window ke liye aaina - /ws ek hi client ka hai,
+    # isliye robot isi aakhri status ko /robot-status se padhta hai.
+    _last_ui_status["state"] = state
+    _last_ui_status["message"] = message
+    _last_ui_status["at"] = time.monotonic()
     await manager.send_status(state, message)
 
 
@@ -435,6 +441,20 @@ ui_mod.mount_dashboard(app)
 @app.get("/")
 async def index():
     return FileResponse(str(STATIC_DIR / "index.html"))
+
+
+@app.get("/robot-status")
+async def robot_status():
+    """v3.36 Robot Dost: aakhri UI status ka read-only aaina.
+    /ws par ek hi client reh sakta hai (badi HUD); robot window
+    is endpoint ko poll karke wahi haalat dikhati hai jo HUD ko
+    WebSocket par mili. Koi audio/mic is raaste par nahi jata."""
+    at = _last_ui_status.get("at") or 0.0
+    return {
+        "state": _last_ui_status.get("state") or "idle",
+        "message": _last_ui_status.get("message") or "",
+        "age_s": (round(time.monotonic() - at, 1) if at else None),
+    }
 
 
 @app.get("/health")
@@ -874,6 +894,10 @@ def main():
     url = f"http://{config.HOST}:{config.PORT}"
     if os.environ.get("MAYERA_NO_BROWSER") != "1":
         ui_mod.open_ui_later(url)
+        # v3.36 Robot Dost: kone wali chhoti robot window
+        # (MAYERA_NO_ROBOT=1 se band; fail-soft, JARVIS nahi rukta)
+        if os.environ.get("MAYERA_NO_ROBOT") != "1":
+            ui_mod.open_robot_later(url)
     print()
     print("  ============================================")
     print("   JARVIS AI - Voice Companion")
