@@ -1926,3 +1926,15 @@ FAKE-INSTALL PROOF: neeche addendum me (stub + live).
 SACHAAI: expression ki quality aakhir me subjective hai -
 flag sach me chalta hai ya nahi aur lehja kaisa lagta
 hai, ye owner ke laptop par sunne se hi pakka hoga.
+FAKE-INSTALL PROOF (v3.39.0 addendum): stub stage - ek
+asal v3.38.1 install (nakli mayera_memory.db/key.dat
+sentinel ke saath) ke updater ko local naye ped se
+stub-fetch par chalaya gaya: "Update ho gaya! JARVIS ab
+v3.39.0 hai.", badli hui files (core/gemini_live.py,
+config/settings.py, TEST_REPORT.md, checksums.txt)
+byte-identical, dono sentinel byte-identical. Push
+(feature commit f3d06f70) ke baad live stage: ek taaza
+nakli v3.38.1 install LIVE GitHub channel se asal
+updater se PEHLI hi koshish me update hua - "Update ho
+gaya! JARVIS ab v3.39.0 hai.", badli hui files
+byte-identical, dono sentinel byte-identical.
