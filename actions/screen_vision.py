@@ -111,8 +111,12 @@ _LOCATE_PROMPT = (
     "Reply with ONLY a JSON object, no other words: "
     "{{\"x\": <0-1000>, \"y\": <0-1000>}} giving the CENTER of that "
     "element, where x and y are relative coordinates on a "
-    "0-1000 scale across the whole image. If no such element is "
-    "visible, reply ONLY: {{\"found\": false}}. Never guess a "
+    "0-1000 scale across the whole image. The point must be the "
+    "exact CENTER of the element, not its corner or edge. If no "
+    "such element is visible, reply ONLY: {{\"found\": false}}. "
+    "If TWO OR MORE elements match about equally well and you "
+    "cannot tell which one is meant, reply ONLY: "
+    "{{\"found\": false, \"ambiguous\": true}}. Never guess a "
     "position for something you cannot actually see."
 )
 
@@ -153,35 +157,76 @@ def png_size(png_bytes):
     return width, height
 
 
-def parse_point(text):
-    """Parse the locator's JSON point -> (x, y) in 0..1000, or None."""
+def parse_locate(text):
+    """Parse the locator's JSON reply (v3.38) ->
+    {"verdict": "found", "x": .., "y": ..} with x/y in 0..1000,
+    or {"verdict": "not_found"} / {"verdict": "ambiguous"}.
+    Ambiguity is its own verdict so the caller can ASK instead of
+    clicking one of two look-alikes blind."""
     import json
     import re
     match = re.search(r"\{.*\}", text or "", re.DOTALL)
     if not match:
-        return None
+        return {"verdict": "not_found"}
     try:
         data = json.loads(match.group(0))
     except ValueError:
-        return None
-    if not isinstance(data, dict) or data.get("found") is False:
-        return None
+        return {"verdict": "not_found"}
+    if not isinstance(data, dict):
+        return {"verdict": "not_found"}
+    if data.get("found") is False:
+        if data.get("ambiguous"):
+            return {"verdict": "ambiguous"}
+        return {"verdict": "not_found"}
     try:
         x, y = float(data["x"]), float(data["y"])
     except (KeyError, TypeError, ValueError):
-        return None
+        return {"verdict": "not_found"}
     if not (0 <= x <= 1000 and 0 <= y <= 1000):
+        return {"verdict": "not_found"}
+    return {"verdict": "found", "x": x, "y": y}
+
+
+def parse_point(text):
+    """Parse the locator's JSON point -> (x, y) in 0..1000, or None."""
+    result = parse_locate(text)
+    if result["verdict"] != "found":
         return None
-    return x, y
+    return result["x"], result["y"]
 
 
 class ScreenVision:
     def __init__(self, pc=None, capturer=None, describer=None,
-                 locator=None):
+                 locator=None, sizer=None):
         self._pc = pc
         self._capturer = capturer      # () -> bytes | dict(pc.capture_png)
         self._describer = describer or _default_describer
         self._locator = locator or _default_locator
+        self._sizer = sizer            # () -> (w, h) real screen px
+
+    def _screen_size(self, png):
+        """The size the 0-1000 point is converted against (v3.38).
+
+        The REAL screen size from the OS (via the PC controller's
+        sizer) wins over the screenshot's own pixel size: on a
+        DPI-scaled laptop the capture can be physical while the
+        cursor lives in the same physical space only after the
+        process opts into DPI awareness - and if a capture ever
+        arrives downscaled, converting against the PNG size would
+        shrink every click toward the top-left. Falls back to the
+        PNG size when no sizer is available (old behaviour)."""
+        sizer = self._sizer
+        if sizer is None and self._pc is not None:
+            sizer = getattr(self._pc, "screen_size", None)
+        if sizer is not None:
+            try:
+                width, height = sizer()
+                width, height = int(width), int(height)
+                if width > 0 and height > 0:
+                    return width, height
+            except Exception:  # noqa: BLE001 - fall back to PNG
+                pass
+        return png_size(png)
 
     def locate(self, target):
         """Find the named element on screen (v3.21): capture, ask
@@ -234,7 +279,7 @@ class ScreenVision:
             return error
         if not png:
             return {"status": "error", "message": "screenshot khaali aaya"}
-        size = png_size(png)
+        size = self._screen_size(png)
         if size is None:
             return {"status": "error",
                     "message": "screenshot ka size nahi padh paya"}
@@ -246,15 +291,40 @@ class ScreenVision:
         except Exception as exc:  # noqa: BLE001
             return {"status": "error",
                     "message": f"element dhoondh nahi paya ({exc.__class__.__name__})"}
-        point = parse_point(raw)
-        if point is None:
-            return {"status": "error",
+        found = parse_locate(raw)
+        if found["verdict"] == "ambiguous":
+            # v3.38: two look-alikes - kabhi andha click nahi.
+            # Model ko bolo ki wo ek chhota sawaal puche.
+            return {"status": "error", "reason": "ambiguous",
+                    "message": f"'{target}' jaise EK SE ZYADA element "
+                               "screen par dikh rahe hain - galat wala "
+                               "click ho sakta hai, isliye click nahi kiya",
+                    "ask": f"Golu se ek chhota sawaal puchho: "
+                           f"'{target}' wale do option dikh rahe hain, "
+                           "kaun sa wala chahiye?"}
+        if found["verdict"] != "found":
+            return {"status": "error", "reason": "not_found",
                     "message": f"'{target}' screen par nahi dikha - "
                                "galat click nahi karunga"}
         width, height = size
-        x = int(round(point[0] / 1000 * width))
-        y = int(round(point[1] / 1000 * height))
+        x = int(round(found["x"] / 1000 * width))
+        y = int(round(found["y"] / 1000 * height))
+        x = max(0, min(width - 1, x))
+        y = max(0, min(height - 1, y))
         return {"status": "ok", "target": target, "x": x, "y": y}
+
+    def verify_click(self, target):
+        """Look once more AFTER a click (v3.38): what does the
+        screen show now? The click_on_screen result used to claim
+        'done' without ever checking - a click on the wrong
+        look-alike was reported as success. This returns the same
+        dict shape as look(); callers quote 'description' as the
+        honest after-state and say so when it errors."""
+        return self.look(
+            f"Abhi '{target}' naam ke element par click hua hai. "
+            "Click ke baad screen par ab kya dikh raha hai - kya "
+            "kuch badla (naya page, dialog, window, menu ya "
+            "highlight)? Sirf jo sach me dikhe wahi batao.")
 
     def _capture(self):
         """Return (png_bytes, error_dict). Exactly one is not None."""

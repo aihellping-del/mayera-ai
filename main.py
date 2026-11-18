@@ -54,7 +54,7 @@ from core.connection_manager import ConnectionManager
 from core.errors import MayeraError, friendly_error
 from core.gemini_live import GeminiLiveSession
 from memory.memory_store import MemoryStore
-from actions.pc_control import PcController
+from actions.pc_control import PcController, ensure_dpi_awareness
 from core.proactive import ProactiveWatcher
 from actions.screen_vision import ScreenVision
 from actions.tools import ToolExecutor
@@ -75,6 +75,12 @@ manager = ConnectionManager()
 # sessions that then talk over each other.
 start_lock = asyncio.Lock()
 store = MemoryStore()
+# v3.38: DPI awareness sabse pehle - bina iske Windows scaling
+# (125%/150%) par screen-vision ke click asal nishane se hat
+# kar lagte the (physical screenshot vs virtualised cursor).
+_dpi_level = ensure_dpi_awareness()
+if _dpi_level:
+    log.info("DPI awareness set: %s", _dpi_level)
 _pc = PcController()
 
 # v3.17 (Mark LVI port): file kaam + the UI-issued confirmation

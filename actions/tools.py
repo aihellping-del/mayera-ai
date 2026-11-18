@@ -193,8 +193,12 @@ def function_declarations():
             description=(
                 "Move the mouse pointer on his screen by voice: "
                 "direction up/down/left/right (percent of the screen, "
-                "default 20) or 'center'. Use when he says 'mouse upar "
-                "le jao', 'thoda right karo', 'beech me le jao'."
+                "default 20) or 'center'. The arrow GLIDES there "
+                "smoothly so he can follow it. Use ONLY for plain "
+                "direction moves ('mouse upar le jao', 'thoda right "
+                "karo', 'beech me le jao') - to click something he "
+                "NAMES, use click_on_screen instead, never steer "
+                "blind with this + mouse_click."
             ),
             parameters=types.Schema(
                 type=types.Type.OBJECT,
@@ -260,10 +264,13 @@ def function_declarations():
             name="click",
             description=(
                 "Move the mouse to an exact screen point (x, y in "
-                "pixels) and click there. Use ONLY with coordinates "
-                "you got from look_at_screen - never guess a point. "
-                "button 'left' (default) or 'right'; double=true for "
-                "a double click."
+                "pixels) and click there. Rarely the right tool: "
+                "look_at_screen gives only a text description, NOT "
+                "coordinates, so you almost never have a trustworthy "
+                "point for this - for anything he NAMES on screen "
+                "use click_on_screen, which sees and clicks the "
+                "element itself. Never guess a point. button 'left' "
+                "(default) or 'right'; double=true for a double click."
             ),
             parameters=types.Schema(
                 type=types.Type.OBJECT,
@@ -790,12 +797,21 @@ def function_declarations():
         types.FunctionDeclaration(
             name="click_on_screen",
             description=(
-                "Look at the user's screen, FIND the named element "
-                "(link, button, tab - in his own Chrome or any app) "
-                "and CLICK it. Use when he says 'mere Chrome me "
-                "Download par click karo' or names something visible "
-                "on screen. Money/send/delete-looking labels first "
-                "ask on a confirmation card by themselves."
+                "PREFERRED way to click anything he NAMES: look at "
+                "the user's screen, FIND that exact element (link, "
+                "button, tab, icon - in his own Chrome or any app) "
+                "with real vision and CLICK its centre, then look "
+                "again and report what actually changed ('after'). "
+                "Use whenever he says 'X par click karo' naming "
+                "something visible ('mere Chrome me Download par "
+                "click karo', 'Chrome icon par click karo'). NEVER "
+                "steer with mouse_move/mouse_click or guess pixel "
+                "coordinates for a named target - this tool is the "
+                "only grounded way. If it says not found or "
+                "ambiguous, do NOT click anything: say so honestly "
+                "and ask him one short question. Money/send/delete-"
+                "looking labels first ask on a confirmation card "
+                "by themselves."
             ),
             parameters=types.Schema(
                 type=types.Type.OBJECT,
@@ -1000,13 +1016,33 @@ class ToolExecutor:
                                    "confirmation nahi mili"}
         located = self._vision.locate(text)
         if located.get("status") != "ok":
+            # not_found / ambiguous / error - kabhi andha click
+            # nahi; 'ask' wala result model ko sawaal puchne ko
+            # kehta hai.
             return located
         clicked = self._pc.click(located["x"], located["y"])
         if clicked.get("status") not in ("ok", "clicked", "done"):
             return clicked
-        return {"status": "done", "clicked": text,
-                "at": [located["x"], located["y"]],
-                "note": "screen par dekh kar wahi element click kiya"}
+        result = {"status": "done", "clicked": text,
+                  "at": [located["x"], located["y"]],
+                  "note": "screen par dekh kar wahi element click kiya"}
+        # v3.38: click ke baad screen dobara dekho - pehle 'done'
+        # bina jaanche bol diya jata tha, galat element par click
+        # bhi safalta ban jata tha. Ab 'after' me wahi likho jo
+        # sach me dikha; verify fail ho to wo bhi saaf bolo.
+        verify = getattr(self._vision, "verify_click", None)
+        if verify is not None:
+            try:
+                after = verify(text)
+            except Exception:  # noqa: BLE001 - verify is a bonus
+                after = None
+            if after is not None and after.get("status") == "ok":
+                result["after"] = after.get("description", "")[:400]
+            else:
+                result["verify"] = ("click ke baad screen dobara "
+                                    "nahi dekh paya - Golu ko ye "
+                                    "saaf bata do")
+        return result
 
     def _yt_action(self, name, args):
         if self._yt is None:

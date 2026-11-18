@@ -430,6 +430,65 @@ def _default_title_focuser(title_part, timeout):
     return False
 
 
+_DPI_AWARENESS_SET = None
+
+
+def ensure_dpi_awareness():
+    """Make THIS process DPI-aware (v3.38) - the root fix for
+    clicks landing off-target on his laptop.
+
+    The audit: nothing in JARVIS ever opted into DPI awareness,
+    so on a Windows laptop with 125%/150% display scaling (the
+    usual Lenovo default) the process is DPI-UNAWARE: Windows
+    virtualises GetSystemMetrics / GetCursorPos / SetCursorPos
+    into scaled 'logical' pixels, while the mss screenshot is
+    real physical pixels. Screen-vision scaled its 0-1000 point
+    against the physical screenshot and handed physical pixels
+    to SetCursorPos, which read them as logical - so every
+    vision click landed ~(scaling factor)x too far toward the
+    bottom-right, often clamped at the screen edge. With
+    per-monitor awareness set, metrics, cursor, capture and
+    clicks all live in the SAME physical pixels.
+
+    Best-effort and fail-soft: returns a short string naming the
+    level set ('per-monitor-v2', 'per-monitor', 'system') or
+    None when it could not be set (non-Windows, too late, OS too
+    old) - mouse control keeps working either way, just as
+    before. Safe to call more than once."""
+    global _DPI_AWARENESS_SET
+    if _DPI_AWARENESS_SET is not None:
+        return _DPI_AWARENESS_SET or None
+    result = None
+    if sys.platform.startswith("win"):
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            # PER_MONITOR_AWARE_V2 = (HANDLE)-4 (Win10 1703+)
+            try:
+                if user32.SetProcessDpiAwarenessContext(
+                        ctypes.c_void_p(-4)):
+                    result = "per-monitor-v2"
+            except Exception:  # noqa: BLE001 - older Windows
+                pass
+            if result is None:
+                try:
+                    # PROCESS_PER_MONITOR_DPI_AWARE = 2 (Win8.1+)
+                    if ctypes.windll.shcore.SetProcessDpiAwareness(2) == 0:
+                        result = "per-monitor"
+                except Exception:  # noqa: BLE001
+                    pass
+            if result is None:
+                try:
+                    if user32.SetProcessDPIAware():
+                        result = "system"
+                except Exception:  # noqa: BLE001
+                    pass
+        except Exception:  # noqa: BLE001 - never fatal
+            result = None
+    _DPI_AWARENESS_SET = result or ""
+    return result
+
+
 def _default_setpos(x, y):
     """Move the visible arrow cursor to (x, y), nothing else."""
     try:
@@ -703,6 +762,10 @@ class PcController:
         self._window_restorer = window_restorer or _default_window_restore
         self._media_keyer = media_keyer or _default_media_key
         self._last_open = None  # (process image, monotonic time)
+        # v3.38: opt the process into DPI awareness as early as
+        # this controller exists (main.py also calls it at import
+        # time) so cursor/metrics/capture share physical pixels.
+        ensure_dpi_awareness()
         # pyautogui FAILSAFE (v3.13, user's spec): slamming the mouse
         # into a screen corner aborts pyautogui actions. Best-effort -
         # pyautogui is optional, the ctypes paths do not need it.
@@ -862,6 +925,18 @@ class PcController:
     # jao", "click karo", "neeche scroll karo" - and drives YouTube
     # with k (play/pause), f (fullscreen), j/l (seek).
     # ------------------------------------------------------------------
+    def screen_size(self):
+        """Real screen size in the SAME pixels SetCursorPos uses
+        (physical pixels once DPI awareness is set, v3.38).
+        Screen-vision converts its 0-1000 points against THIS -
+        never against the screenshot's pixel size, which is where
+        scaled captures used to throw clicks off."""
+        try:
+            width, height = self._sizer()
+            return int(width), int(height)
+        except Exception:  # noqa: BLE001
+            return 1920, 1080
+
     def mouse_move(self, direction, percent=20):
         blocked = self._guard()
         if blocked:
@@ -874,9 +949,40 @@ class PcController:
             percent = max(1, min(90, int(percent)))
         except (TypeError, ValueError):
             percent = 20
-        pos = self._mover(direction, percent)
+        # v3.38: GLIDE to the destination instead of the old
+        # single SetCursorPos teleport - he could never SEE where
+        # the arrow went, so every voice-steered move felt random
+        # and overshot. The target is computed from the CURRENT
+        # cursor position + percent of the real screen, then the
+        # same eased glide as clicks carries the arrow there.
+        start = None
+        try:
+            start = self._positioner()
+        except Exception:  # noqa: BLE001
+            start = None
+        if not start:
+            # Cannot read the cursor - keep the proven mover path.
+            pos = self._mover(direction, percent)
+            return {"status": "moved", "direction": direction,
+                    "percent": percent,
+                    "position": list(pos) if pos else None}
+        width, height = self.screen_size()
+        x, y = int(start[0]), int(start[1])
+        if direction == "center":
+            x, y = width // 2, height // 2
+        elif direction == "left":
+            x -= int(width * percent / 100)
+        elif direction == "right":
+            x += int(width * percent / 100)
+        elif direction == "up":
+            y -= int(height * percent / 100)
+        elif direction == "down":
+            y += int(height * percent / 100)
+        x = max(0, min(width - 1, x))
+        y = max(0, min(height - 1, y))
+        self._glide_to(x, y)
         return {"status": "moved", "direction": direction,
-                "percent": percent, "position": list(pos) if pos else None}
+                "percent": percent, "position": [x, y]}
 
     def mouse_click(self, button="left", double=False):
         blocked = self._guard()
@@ -920,15 +1026,20 @@ class PcController:
             if not start:
                 self._setpos(x, y)
                 return
-            steps = 14
             sx, sy = start
+            # v3.38: distance-adaptive steps - a short hop lands
+            # in ~0.15 s, a full-screen travel in ~0.4 s. Never an
+            # instant teleport (he loses the arrow), never a slow
+            # crawl (he waits on it).
+            dist = max(abs(x - sx), abs(y - sy))
+            steps = max(8, min(24, int(dist / 55) + 6))
             for i in range(1, steps + 1):
                 t = i / steps
                 ease = 1 - (1 - t) ** 2  # fast start, soft landing
                 self._setpos(int(sx + (x - sx) * ease),
                              int(sy + (y - sy) * ease))
                 if i < steps:
-                    self._sleep(0.03)
+                    self._sleep(0.016)
             self._setpos(x, y)
         except Exception:  # noqa: BLE001 - never break the action
             try:

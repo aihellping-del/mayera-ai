@@ -1683,3 +1683,98 @@ chhu kar baat shuru hogi, JARVIS ki asal awaaz robot se
 aayegi. Mic + playback robot --app window ke andar,
 robot-only launch, aur HUD khulne par socket-badlav ka
 asal vyavhaar usi restart par pakka hoga.
+
+------------------------------------------------------------
+v3.38.0 - "Dekh Kar Click" (owner ki shikayat 2026-11-18:
+"JARVIS thik se mouse arrow control nii kar pa rha hai, or
+jisko click karne bolta hu usko click nii kar pata hai" -
+v3.4.0 ka voice mouse uske asal laptop par kabhi proven nahi
+tha; targeting asal istemal me toota hua maana gaya.)
+
+AUDIT - click aaj miss kyu hota tha (code padh kar pakka):
+1) DPI SCALING (sabse bada kaaran): pure process me kahin
+   DPI awareness set hi nahi thi. Windows scaling 125%/150%
+   (Lenovo ka aam default) par process DPI-unaware rehta hai -
+   GetSystemMetrics/GetCursorPos/SetCursorPos 'logical'
+   pixels me virtualise ho jate hain, jabki mss screenshot
+   asal physical pixels ka hota hai. screen_vision.locate()
+   0-1000 point ko screenshot (physical) size se scale karke
+   physical pixel SetCursorPos ko deta tha, jo use logical
+   samajhta tha - har vision click scaling factor (~1.25x-
+   1.5x) se neeche-dayein hat kar lagta tha, aksar screen
+   kinare par clamp ho jata tha.
+2) ANDHA STEERING: naam wale target ke liye model ke paas
+   mouse_move (screen ke % me, default 20% = 1080p par ~384px
+   ki ek chhalang) + mouse_click ka open-loop chakkar tha -
+   na cursor ki jagah pata, na target ki doori. Miss tay tha.
+3) JHOOTHA COORDINATE SOURCE: 'click' tool ki description
+   kehti thi coordinates look_at_screen se lo - par wo tool
+   sirf TEXT description deta hai, coordinate deta hi nahi.
+   Model prose se pixel ka andaza lagata tha.
+4) KOI POST-CLICK JAANCH NAHI: click_on_screen bina dobara
+   dekhe 'done' bol deta tha - galat look-alike par click bhi
+   safalta ban jata tha.
+5) AMBIGUITY KA KOI VERDICT NAHI: do ek-jaise element ho to
+   locator chup-chaap ek chun leta tha.
+6) RELATIVE MOVE TELEPORT: _default_mover ek hi
+   SetCursorPos se arrow uda deta tha - dikhta hi nahi tha
+   ki arrow gaya kahan.
+
+FIX:
+- pc_control.ensure_dpi_awareness(): process ke liye
+  PER_MONITOR_AWARE_V2 -> per-monitor -> system, jo mile;
+  fail-soft, None par purana vyavhaar. main.py startup me
+  sabse pehle + PcController ban-te hi bhi call. Ab metrics,
+  cursor, capture aur click - sab EK hi physical pixel me.
+- screen_vision: 0-1000 -> pixel conversion ab screenshot ke
+  size se NAHI, OS ke asal screen size se (pc.screen_size() /
+  sizer), PNG size sirf fallback. Locator prompt: CENTER
+  pakka + do ek-jaise element par {"found": false,
+  "ambiguous": true} - parse_locate teen verdict deta hai
+  (found / not_found / ambiguous). Ambiguous par click NAHI,
+  result me 'ask' - model ek chhota sawaal puchega.
+- click_on_screen ke baad verify_click(): screen dobara
+  dekh kar result me 'after' - jo sach me badla wahi report;
+  verify fail ho to 'verify' note ke saath imaandari, jhootha
+  'after' kabhi nahi.
+- mouse_move ab GLIDE karta hai (clicks wala hi eased
+  safar, distance ke hisaab se 8-24 steps, ~0.15-0.4 s);
+  purana mover sirf tab jab cursor padh hi na sake.
+- Tool descriptions + SYSTEM_INSTRUCTION: naam wale target
+  ke liye click_on_screen PREFERRED aur pehla raasta;
+  mouse_move/click ki descriptions wahi redirect karti hain;
+  'nahi dikha'/'ambiguous' par saaf bolna + ek chhota sawaal;
+  'after' na mile to safalta pakki mat bolo.
+- Suraksha vaaisi ki vaaisi: paisa/send/delete label par
+  Haan/Nahi gate locate SE PEHLE chalta hai (test me pakka:
+  gate no -> locator chala hi nahi, click bhi nahi). Screen
+  text = jaankari, command kabhi nahi. Koi naya tool nahi -
+  declarations pehle jitne hi (49 plugin samet, ganit dono
+  pedon par barabar jaancha).
+
+TESTS (sab asal chalaye gaye):
+- test_v38_mouse.py NAYA: 30/30 (DPI fail-soft; parse_locate
+  teeno verdict; conversion 1920x1080 -> (960,270) aur
+  1366x768 -> (683,192); chhota PNG par bhi asal screen size
+  jeetta hai; pc.screen_size() raasta; ambiguous/not-found
+  par executor ek bhi click nahi karta; found par glide ke
+  baad sahi point par click + 'after' verify; verify fail
+  par imaandar note; risky label par gate pehle, locator
+  baad me; relative move glide + monotonic + center +
+  mover fallback; declaration/instruction jaanch).
+- Regression: test_robot_pet 77/77, test_chrome_only 5/5
+  (is VM par fastapi nahi - halke stub ke saath, pichhle
+  releases ki tarah), test_updater_checksums 4/4,
+  test_visible_mouse 11/11, test_fast_vision 10/10,
+  test_screen_click 12/13 aur test_screen_vision 48/49 -
+  dono me ekmatra FAIL purani declaration-ginti wali jaanch
+  hai jo is VM ke plugin-wale ped par purane v3.37.0 ped par
+  bhi utni hi FAIL hoti hai (asal ginti dono par 49);
+  baaki saari functional jaanchein pass.
+- py_compile: pc_control, screen_vision, tools, settings,
+  main - sab OK.
+FAKE-INSTALL PROOF: neeche addendum me (stub + live).
+Owner ka ekmatra bacha step: START_JARVIS.bat se restart,
+phir 'Chrome icon par click karo' jaisa naam lekar test -
+asal DPI scaling par nishana, glide ki asal gati aur
+verify ki asal report usi laptop par pakki hogi.
