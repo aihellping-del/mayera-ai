@@ -1840,3 +1840,17 @@ Owner ka bacha step: v3.38.0 wala restart hi kaafi hai -
 ye nirdesh usi update ke saath laptop par pahunchega;
 asal pariksha uski boli hui farmaishon par hogi (jo kaam
 tool se ho sakta hai, us par 'nahi kar sakta' na aaye).
+FAKE-INSTALL PROOF (v3.38.1 addendum): stub stage - ek
+asal v3.38.0 install (jo pichhle charan me LIVE updater se
+hi bana tha; nakli mayera_memory.db/key.dat sentinel ke
+saath) ke updater ko local naye ped se stub-fetch par
+chalaya gaya: "Update ho gaya! JARVIS ab v3.38.1 hai.",
+settings/TEST_REPORT/checksums byte-identical, dono
+sentinel byte-identical. Push (commit 1653c3b7 - isme
+v3.38.0 ka fake-install addendum bhi saath gaya) ke baad
+live stage: remote ke saare 91 file-hash pehle jaanche
+gaye (koi mismatch nahi), phir ek taaza nakli v3.38.0
+install LIVE GitHub channel se asal updater se pehli hi
+koshish me update hua - "Update ho gaya! JARVIS ab
+v3.38.1 hai.", badli hui files byte-identical, dono
+sentinel byte-identical.
