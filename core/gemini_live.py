@@ -118,6 +118,15 @@ class GeminiLiveSession:
         # instantly: 62,000 reconnects in 1.5 s.
         self._session_born = 0.0
         self._short_lived_streak = 0
+        # v3.39 voice expression (affective dialog): None = abhi
+        # pata nahi, True = is process me chalta hai, False = band
+        # (model ne flag reject kiya, ya expressive session judte
+        # hi mar gaya). Ek baar False ho jaye to is process me
+        # dobara try nahi hota - connection ki speed sabse pehle,
+        # lehja phir sirf SYSTEM_INSTRUCTION se aayega.
+        self._expressive_supported = None
+        self._last_open_expressive = False
+        self._session_expressive = False
         self.last_reconnect_seconds = None
         self._last_msg_at = 0.0    # last message FROM Gemini
         self._last_tool_at = 0.0   # last tool execution (stuck guard)
@@ -365,7 +374,7 @@ class GeminiLiveSession:
         # with fast_thinking=False (the old behaviour) automatically.
         thinking = (types.ThinkingConfig(thinking_budget=0)
                     if fast_thinking else None)
-        return types.LiveConnectConfig(
+        kwargs = dict(
             response_modalities=["AUDIO"],
             thinking_config=thinking,
             system_instruction=self._system_instruction(),
@@ -398,6 +407,26 @@ class GeminiLiveSession:
                 handle=self._resumption_handle
             ),
         )
+        # v3.39: affective dialog - model baat ke mood ke hisaab
+        # se awaaz ka lehja khud badalta hai (utsah/gambhirta/
+        # shaanti). Sirf tab jodo jab (a) owner ne band na kiya
+        # ho (MAYERA_EXPRESSIVE=0), (b) is process me abhi tak
+        # reject na hua ho, aur (c) lage hue SDK me ye field
+        # sach me maujood ho. Teeno me se kuch bhi gadbad ho to
+        # config bilkul purani jaisi - fail-soft, hamesha.
+        expressive = False
+        if (bool(getattr(config, "EXPRESSIVE_AUDIO", False))
+                and self._expressive_supported is not False):
+            try:
+                fields = types.LiveConnectConfig.model_fields
+                if (fields is not None
+                        and "enable_affective_dialog" in fields):
+                    kwargs["enable_affective_dialog"] = True
+                    expressive = True
+            except Exception:  # noqa: BLE001 - purana SDK: chhod do
+                expressive = False
+        self._last_open_expressive = expressive
+        return types.LiveConnectConfig(**kwargs)
 
     async def _open(self, model, with_tools, fast_thinking=True):
         ctx = self._client.aio.live.connect(
@@ -410,6 +439,10 @@ class GeminiLiveSession:
         self._session = session
         self._model_in_use = model
         self._tools_active = with_tools
+        # v3.39: ye session expressive flag ke saath juda tha ya
+        # nahi - judte hi mar jaye to _schedule_reconnect isse
+        # dekh kar flag band kar dega.
+        self._session_expressive = self._last_open_expressive
 
     async def _close_session(self):
         ctx, self._ctx = self._ctx, None
@@ -444,6 +477,39 @@ class GeminiLiveSession:
             models = [first] + [m for m in models if m != first]
         return models
 
+    async def _attempt_open(self, model, with_tools, fast_thinking,
+                            timeout):
+        """Ek connect koshish: True = jud gaya, False = nahi juda
+        (agla try chalega). Auth/quota error par MayeraError upar
+        jata hai - purana vyavhaar, bilkul vaisa ka vaisa."""
+        started = time.monotonic()
+        try:
+            await asyncio.wait_for(
+                self._open(model, with_tools, fast_thinking),
+                timeout=timeout)
+        except Exception as exc:  # noqa: BLE001
+            elapsed = time.monotonic() - started
+            print(f"  [connect] {model} nahi chala "
+                  f"({elapsed:.1f}s) - agla try...",
+                  flush=True)
+            try:
+                await self._close_session()
+            except Exception:  # noqa: BLE001
+                pass
+            code, message = friendly_error(exc)
+            if code in ("auth_error", "quota_error"):
+                raise MayeraError(code, message) from exc
+            return False
+        elapsed = time.monotonic() - started
+        print(f"  [connect] Model jud gaya: {model} "
+              f"({elapsed:.1f}s)", flush=True)
+        if self._store is not None:
+            try:
+                self._store.set_setting("last_model", model)
+            except Exception:  # noqa: BLE001
+                pass
+        return True
+
     async def _try_models(self, attempt_timeout=None):
         """Try models fast-first: tools+no-thinking, then no-tools,
         then the same again with thinking left on (old behaviour) as
@@ -453,33 +519,30 @@ class GeminiLiveSession:
                   (False, False))
         for with_tools, fast_thinking in combos:
             for model in self._ordered_candidates():
-                started = time.monotonic()
-                try:
-                    await asyncio.wait_for(
-                        self._open(model, with_tools, fast_thinking),
-                        timeout=timeout)
-                except Exception as exc:  # noqa: BLE001
-                    elapsed = time.monotonic() - started
-                    print(f"  [connect] {model} nahi chala "
-                          f"({elapsed:.1f}s) - agla try...",
-                          flush=True)
-                    try:
-                        await self._close_session()
-                    except Exception:  # noqa: BLE001
-                        pass
-                    code, message = friendly_error(exc)
-                    if code in ("auth_error", "quota_error"):
-                        raise MayeraError(code, message) from exc
-                    continue
-                elapsed = time.monotonic() - started
-                print(f"  [connect] Model jud gaya: {model} "
-                      f"({elapsed:.1f}s)", flush=True)
-                if self._store is not None:
-                    try:
-                        self._store.set_setting("last_model", model)
-                    except Exception:  # noqa: BLE001
-                        pass
-                return True
+                if await self._attempt_open(model, with_tools,
+                                            fast_thinking, timeout):
+                    if self._session_expressive:
+                        self._expressive_supported = True
+                    return True
+                # v3.39 fail-soft: fail hui koshish affective
+                # dialog (expressive awaaz) ke saath thi - ho
+                # sakta hai model ne flag hi reject kiya ho.
+                # Flag ko is process ke liye band karo aur WAHI
+                # model turant bina flag ke dobara try karo,
+                # taaki sabse tez model sirf ek flag ki wajah se
+                # kabhi na chhoote. Connection ki raftaar par
+                # iska bojh sirf tab padta hai jab flag sach me
+                # reject ho - aur sirf ek baar.
+                if (self._last_open_expressive
+                        and self._expressive_supported is None):
+                    self._expressive_supported = False
+                    print("  [connect] expressive awaaz is model "
+                          "par nahi chali - bina uske dobara "
+                          "try...", flush=True)
+                    if await self._attempt_open(model, with_tools,
+                                                fast_thinking,
+                                                timeout):
+                        return True
         return False
 
     async def _connect_with_fallback(self):
@@ -522,6 +585,15 @@ class GeminiLiveSession:
             _age = time.monotonic() - self._session_born
             if _age < 5:
                 self._short_lived_streak += 1
+                # v3.39: expressive session agar judte hi mar
+                # gaya, to ho sakta hai server ne flag qubool
+                # karke bhi session ko turant kaat diya ho.
+                # Flag is process ke liye band kar do - warna
+                # har reconnect par wahi judna-marna chalega.
+                # Lehja phir sirf instruction se aayega.
+                if self._session_expressive:
+                    self._expressive_supported = False
+                    self._session_expressive = False
             elif _age > 30:
                 self._short_lived_streak = 0
         self._planned_reconnect = planned

@@ -1854,3 +1854,75 @@ install LIVE GitHub channel se asal updater se pehli hi
 koshish me update hua - "Update ho gaya! JARVIS ab
 v3.38.1 hai.", badli hui files byte-identical, dono
 sentinel byte-identical.
+
+------------------------------------------------------------
+v3.39.0 - "Awaaz Me Jaan" (owner ki 5-point Voice Mode
+khwahish 2026-11-18: (1) Natural Human Voice, (2) Real-Time
+Conversation, (3) Voice Expression, (4) Hindi/English/
+Hinglish samajh, (5) Visual Understanding. (2) aur (4)
+pehle se hain, (5) screen-vision ke roop me pehle se hai -
+ye release (1) + (3) par hai: awaaz me jaan aur baat ke
+mood ke hisaab se lehja.)
+
+CONFIG AUDIT (asal google-genai SDK 3.5.0 se jaancha gaya):
+- LiveConnectConfig me expressivity ka EK hi asal option
+  hai: enable_affective_dialog (model mood ke hisaab se
+  awaaz ka lehja khud badalta hai). SpeechConfig me koi
+  expressivity knob nahi hai (sirf voice/language/multi-
+  speaker). 'proactivity' bhi hai par wo expression nahi,
+  model ka khud-se bolna hai - v3.36 me owner ne khud-bolna
+  reject kiya tha, isliye wo NAHI chalaaya.
+- Affective dialog native-audio models ki capability hai;
+  ladder ka pehla model (gemini-2.5-flash-native-audio-
+  preview-12-2025) native-audio hai, baaki rungs par
+  support pakka nahi - isiliye fail-soft design zaroori tha.
+- Awaaz ki pehchan NAHI badli: Charon hi hai (owner ne
+  v3.3.0 me male voice chuna tha); language hi-IN hi hai.
+
+BADLAV:
+- core/gemini_live.py: _live_config ab affective dialog
+  flag jodta hai sirf jab (a) MAYERA_EXPRESSIVE=0 na ho,
+  (b) is process me flag abhi tak reject na hua ho, aur
+  (c) lage hue SDK me field sach me maujood ho (purana SDK
+  ho to config bilkul purani jaisi - koi crash nahi).
+  _try_models fail-soft: flag wali koshish fail ho to flag
+  is process ke liye band, aur WAHI model turant bina flag
+  ke dobara try - sabse tez model ek flag ki wajah se
+  kabhi nahi chhootta; connect ki raftaar par bojh sirf
+  ek reject par, ek hi baar. Expressive session judte hi
+  (<5s) mar jaye to bhi flag band (reconnect loop se
+  suraksha). MAYERA_EXPRESSIVE=0 = hamesha ke liye band.
+  Connect ka baaki raasta (ladder, timeout, last_model)
+  bilkul akshunna; _open ke dastkhat purane jaise hi.
+- config/settings.py: naya EXPRESSIVE_AUDIO switch
+  (MAYERA_EXPRESSIVE env, default on) + SYSTEM_INSTRUCTION
+  me LEHJA block: mood ke hisaab se lehja - khushi par
+  halka utsah, gambhir baat par shaant-gambhir, udaasi par
+  naram hamdardi; natural chhote pauses; ek-sur robot
+  jaisa kabhi nahi; expression SIRF lehje se, lines SPEED
+  RULE ke hisaab se chhoti hi rahengi. Ek chhoti jod
+  (point 5): screen par khuli photo/image ke sawal par
+  look_at_screen se dekh kar jawab - routing saaf ki.
+- KAAM KE NIYAM akshunna: v3.38.1 capability-first niyam
+  aur rule (3) Haan/Nahi gate shabdon me bilkul vaaise ke
+  vaaise (test se pakka). Koi naya tool NAHI; declarations
+  ab bhi 49.
+
+TESTS: test_v39_voice.py NAYA - stub SDK par 28/28, asal
+SDK (google-genai 3.5.0) par 27/27 (field-missing wala
+ek check asal SDK par lagu nahi, wahan skip): config me
+flag default-on + Charon barkarar; flag ke saath connect
+-> supported pakka; reject par wahi model bina flag ke
+turant dobara jud gaya (2 koshishen, pehli flag ke saath);
+EXPRESSIVE band par flag kabhi nahi; purane SDK (field
+nahi) par config bina crash purani jaisi; judte-hi-mara
+expressive session -> flag band; LEHJA shabdawali
+maujood; capability-first + gate verbatim akshunna;
+photo routing maujood; declarations = 49.
+Regression: test_robot_pet 77/77, test_v38_mouse 30/30,
+test_v381_capability 11/11, test_chrome_only 5/5
+(stub-sahayata), test_updater_checksums 4/4.
+FAKE-INSTALL PROOF: neeche addendum me (stub + live).
+SACHAAI: expression ki quality aakhir me subjective hai -
+flag sach me chalta hai ya nahi aur lehja kaisa lagta
+hai, ye owner ke laptop par sunne se hi pakka hoga.

@@ -38,6 +38,16 @@ VOICE_NAME = os.environ.get("MAYERA_VOICE", "Charon")
 # hi-IN keeps the spoken replies naturally Hindi-first.
 LANGUAGE_CODE = os.environ.get("MAYERA_LANGUAGE", "hi-IN")
 
+# Voice expression (v3.39): Gemini Live ki affective-dialog
+# capability - model baat ke mood ke hisaab se apni awaaz ka
+# lehja (utsah / gambhirta / shaanti) khud badalta hai. Ye sirf
+# kuch models (native-audio wale) par chalta hai; jahan support
+# na ho, core/gemini_live.py khud hi bina iske dobara connect
+# kar leta hai (fail-soft) - connection kabhi iski wajah se
+# nahi rukta aur der bhi nahi hoti. MAYERA_EXPRESSIVE=0 se
+# poori tarah band; lehja tab sirf SYSTEM_INSTRUCTION se aayega.
+EXPRESSIVE_AUDIO = os.environ.get("MAYERA_EXPRESSIVE", "1") != "0"
+
 # Audio formats (fixed by the Gemini Live API).
 INPUT_SAMPLE_RATE = 16000   # microphone -> Gemini : PCM 16-bit, 16 kHz
 OUTPUT_SAMPLE_RATE = 24000  # Gemini -> speaker    : PCM 16-bit, 24 kHz
@@ -111,6 +121,19 @@ SYSTEM_INSTRUCTION = (
     "naram sa follow-up. Agar beech me tum ruk jao ya wo tok de, to "
     "shanti se wahin se aage badho - ghabrao mat, sorry ka jaap mat "
     "karo. Apni baat naram lehje me rakho, jaise paani behta hai.\n"
+    "LEHJA (voice expression, v3.39): tumhari awaaz me jaan honi "
+    "chahiye - ek hi sur me, robot ki tarah, kabhi mat bolo. Baat "
+    "ke mood ke hisaab se apna lehja khud badlo: khushi ya jeet "
+    "ki baat ho to awaaz me halka utsah aur jaan lao; gambhir ya "
+    "pareshani wali baat ho to shaant, thahra hua aur gambhir "
+    "lehja rakho; wo udaas ya thaka ho to awaaz naram, dheemi "
+    "aur hamdardi bhari rakho. Beech-beech me natural chhote "
+    "pauses lo - saans lene jaisi jagah - taaki baat insaano "
+    "jaisi lage, machine ki report nahi. LEKIN expression sirf "
+    "lehje se aayega, lambey shabdon se nahi: lines waisi hi "
+    "chhoti rahengi jo neeche wala SPEED RULE kehta hai - khushi "
+    "me bhi jawab khicho mat, gambhir baat me bhi ghuma-phira "
+    "kar mat bolo; seedha, saaf, bas lehje me ehsaas.\n"
     "SPEED RULE (very important): reply like fast voice chat, not an "
     "essay. Start IMMEDIATELY, no silent thinking. Default reply: 1-2 "
     "short sentences (ehsaas wali baat ho to 1-3); longer only when he clearly asks for detail or "
@@ -145,7 +168,7 @@ SYSTEM_INSTRUCTION = (
     "can also control his PC: open or close apps ('Chrome kholo', "
     "'Notepad band karo'), raise, lower or mute the volume, type text "
     "he dictates into the window in front, and take a screenshot when "
-    "asked. Tum screen DEKH bhi sakte ho: jab wo puche 'main kya kar raha hu', 'ye kya hai', 'ye error kya hai' ya 'screen par kya likha hai', to look_at_screen tool se TAZA screen dekho aur sirf usi description ke aadhar par chhota saaf jawab do - jo description me nahi hai wo kabhi mat banao, dikhai na de to saaf bolo ki dikh nahi raha. Click karne se pehle screen dekh kar target pakka karo, andhe me click mat karo; type ya click ke baad zarurat lage to screen dekh kar pakka karo ki kaam sach me hua. You can move his mouse by voice ('mouse upar le jao', "
+    "asked. Tum screen DEKH bhi sakte ho: jab wo puche 'main kya kar raha hu', 'ye kya hai', 'ye error kya hai' ya 'screen par kya likha hai', to look_at_screen tool se TAZA screen dekho aur sirf usi description ke aadhar par chhota saaf jawab do - jo description me nahi hai wo kabhi mat banao, dikhai na de to saaf bolo ki dikh nahi raha. Screen par koi photo ya image khuli ho aur wo uske baare me puche ('ye photo kaisa hai', 'is photo me kya hai', 'ye kiski photo hai'), to bhi look_at_screen se use dekh kar hi jawab do - bina dekhe andaza kabhi mat lagao. Click karne se pehle screen dekh kar target pakka karo, andhe me click mat karo; type ya click ke baad zarurat lage to screen dekh kar pakka karo ki kaam sach me hua. You can move his mouse by voice ('mouse upar le jao', "
     "'click karo', 'neeche scroll karo') and press keys. You can play "
     "any YouTube video he names ('Arijit ka gana chalao') - if he "
     "wants a choice, list the top results with numbers and play the "
