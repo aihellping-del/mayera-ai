@@ -1778,3 +1778,65 @@ Owner ka ekmatra bacha step: START_JARVIS.bat se restart,
 phir 'Chrome icon par click karo' jaisa naam lekar test -
 asal DPI scaling par nishana, glide ki asal gati aur
 verify ki asal report usi laptop par pakki hogi.
+FAKE-INSTALL PROOF (v3.38.0 addendum): pehle ek nakli
+v3.37.0 install (shipped MAYERA ped ki hू-ba-hू copy +
+nakli mayera_memory.db/key.dat sentinel) ke apne purane
+updater ko local naye ped se stub-fetch par chalaya gaya -
+"Update ho gaya! JARVIS ab v3.38.0 hai.", badli hui saari
+files (pc_control, screen_vision, tools, settings, main,
+TEST_REPORT, checksums) byte-identical, dono sentinel
+byte-identical. Phir push (feature commit 49b92e07) ke
+baad ek taaza nakli v3.37.0 install LIVE GitHub channel
+se asal updater se update hua - pehli do koshishon me
+CDN ka mila-jula purana/naya set aane se checksum-jaanch
+ne update surakshit roka (v3.31.1 wali suraksha, aadha
+update nahi hua); saare 91 files ke hash remote par pakke
+hone ke baad teesri koshish me "Update ho gaya! JARVIS ab
+v3.38.0 hai." - badli hui files byte-identical (version.txt
+updater apne haath se '\n' ke saath likhta hai, isliye wo
+ek byte alag hai - ye updater ka apna canonical likhna
+hai), dono sentinel byte-identical.
+
+------------------------------------------------------------
+v3.38.1 - "Kaam Pehle, Manaai Nahi" (owner ka seedha order
+2026-11-18, v3.38.0 push ke baad aaya isliye alag chhota
+release: "Mai jo bolu o kam kare, ayesa kar do, ye na kahe
+ko mai yah nii kar sakta hu" - JARVIS bina koshish kiye
+manaai/deflection deta tha, owner isse pareshan tha.)
+
+BADLAV (sirf nirdesh/vyavhaar - koi code/tool nahi badla):
+config/settings.py ke SYSTEM_INSTRUCTION ke KAAM KE NIYAM
+rule (1) me capability-first niyam joda:
+- Jo kaam kisi maujooda tool se ho sakta hai (app kholna/
+  band, click, type, search, gaana/video, volume, mouse,
+  file, reminder, browser), JARVIS PEHLE tool chala kar
+  koshish karega - bina try kiye 'mai ye nahi kar sakta',
+  'mujhse nahi hoga' ya koi taal-matol KABHI nahi.
+- Tool fail ho to EK alternate route (dusra tool/tareeka);
+  phir bhi na ho to sirf EK chhoti line: kya fail hua +
+  sabse paas wala kaam jo sach me ho sakta hai. Lambi
+  maafi/lecture nahi.
+- HARD LIMIT, jaan-boojh kar saaf likha: ye niyam sirf
+  JHOOTHI manaai ke khilaf hai. Haan/Nahi confirmation
+  wala niyam (rule 3 - delete/bhejna/payment/shutdown
+  class) bilkul vaaisa ka vaaisa; capability niyam us
+  suraksha ko kamzor NAHI karta - ye baat instruction me
+  bhi shabdon me likhi hai. Koi naya tool nahi joda;
+  declarations v3.38.0 jitne hi.
+
+TESTS: test_v381_capability.py NAYA 11/11 - capability
+shabdawali instruction me maujood (KAAM PEHLE MANAAI NAHI,
+PEHLE tool, bina try kiye manaai nahi, EK alternate route,
+ek line me wajah + paas wala kaam, lambi maafi nahi);
+confirmation rule (3) akshunna; capability text khud
+kehta hai suraksha kamzor nahi hoti; gate payment-class
+click ko ab bhi rokta hai (click nahi, card ek baar);
+aam click ab bhi end-to-end chalta hai; declaration ginti
+aprabhavit. Regression: test_v38_mouse 30/30,
+test_robot_pet 77/77, test_chrome_only 5/5 (stub-sahayata),
+test_updater_checksums 4/4.
+FAKE-INSTALL PROOF: neeche addendum me (stub + live).
+Owner ka bacha step: v3.38.0 wala restart hi kaafi hai -
+ye nirdesh usi update ke saath laptop par pahunchega;
+asal pariksha uski boli hui farmaishon par hogi (jo kaam
+tool se ho sakta hai, us par 'nahi kar sakta' na aaye).
